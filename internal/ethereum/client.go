@@ -134,25 +134,32 @@ func (c *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64,
 
 // BuildUnsignedTx constructs a fully populated unsigned transaction, estimating
 // gas and querying gas price from the chain. Returns the RLP-encoded hex string.
-func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address, data []byte, value *big.Int, chainID *big.Int, nonce uint64) (string, *types.Transaction, error) {
+//
+// If gasOverride is non-zero it is used directly as the gas limit (no
+// estimation). This is needed for multi-tx flows where a later transaction
+// depends on state created by an earlier one (e.g. supply after approve) —
+// eth_estimateGas would revert because the approve hasn't executed yet.
+func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address, data []byte, value *big.Int, chainID *big.Int, nonce uint64, gasOverride uint64) (string, *types.Transaction, error) {
 	gasPrice, err := c.SuggestGasPrice(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("suggest gas price: %w", err)
 	}
 
-	gas, err := c.EstimateGas(ctx, ethereum.CallMsg{
-		From:     from,
-		To:       &to,
-		Data:     data,
-		Value:    value,
-		GasPrice: gasPrice,
-	})
-	if err != nil {
-		return "", nil, fmt.Errorf("estimate gas: %w", err)
+	gas := gasOverride
+	if gas == 0 {
+		gas, err = c.EstimateGas(ctx, ethereum.CallMsg{
+			From:     from,
+			To:       &to,
+			Data:     data,
+			Value:    value,
+			GasPrice: gasPrice,
+		})
+		if err != nil {
+			return "", nil, fmt.Errorf("estimate gas: %w", err)
+		}
+		// Apply 20% safety margin to estimated gas only.
+		gas = gas * 120 / 100
 	}
-
-	// Apply 20% safety margin.
-	gas = gas * 120 / 100
 
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,

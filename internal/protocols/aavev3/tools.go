@@ -14,6 +14,13 @@ import (
 	"github.com/vultisig/mcp/internal/vault"
 )
 
+// Default gas limits for transactions that follow an approve and therefore
+// cannot be estimated against current on-chain state.
+const (
+	gasLimitSupply = 300_000
+	gasLimitRepay  = 300_000
+)
+
 // Protocol implements the protocols.Protocol interface for Aave V3.
 type Protocol struct{}
 
@@ -132,16 +139,17 @@ func handleDeposit(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolC
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Tx 1: approve(Pool, amount) on asset token.
+		// Tx 1: approve(Pool, amount) on asset token — gas can be estimated.
 		approveData := EncodeApprove(pool, amount)
-		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce)
+		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
 		}
 
-		// Tx 2: supply(asset, amount, user, 0) on Pool.
+		// Tx 2: supply(asset, amount, user, 0) on Pool — depends on approve,
+		// so gas estimation would revert; use a fixed gas limit.
 		supplyData := EncodeSupply(asset, amount, user)
-		supplyHex, supplyTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, supplyData, big.NewInt(0), chainID, nonce+1)
+		supplyHex, supplyTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, supplyData, big.NewInt(0), chainID, nonce+1, gasLimitSupply)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build supply tx: %v", err)), nil
 		}
@@ -230,8 +238,9 @@ func handleWithdraw(store *vault.Store, ethClient *ethereum.Client, pc *Protocol
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
+		// Standalone tx — gas can be estimated normally.
 		withdrawData := EncodeWithdraw(asset, amount, user)
-		withdrawHex, withdrawTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, withdrawData, big.NewInt(0), chainID, nonce)
+		withdrawHex, withdrawTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, withdrawData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build withdraw tx: %v", err)), nil
 		}
@@ -306,8 +315,9 @@ func handleBorrow(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolCl
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
+		// Standalone tx — gas can be estimated normally.
 		borrowData := EncodeBorrow(asset, amount, user)
-		borrowHex, borrowTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, borrowData, big.NewInt(0), chainID, nonce)
+		borrowHex, borrowTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, borrowData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build borrow tx: %v", err)), nil
 		}
@@ -383,16 +393,17 @@ func handleRepay(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolCli
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Tx 1: approve(Pool, amount) on asset token.
+		// Tx 1: approve(Pool, amount) on asset token — gas can be estimated.
 		approveData := EncodeApprove(pool, amount)
-		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce)
+		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
 		}
 
-		// Tx 2: repay(asset, amount, 2, user) on Pool.
+		// Tx 2: repay(asset, amount, 2, user) on Pool — depends on approve,
+		// so gas estimation would revert; use a fixed gas limit.
 		repayData := EncodeRepay(asset, amount, user)
-		repayHex, repayTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, repayData, big.NewInt(0), chainID, nonce+1)
+		repayHex, repayTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, repayData, big.NewInt(0), chainID, nonce+1, gasLimitRepay)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build repay tx: %v", err)), nil
 		}
