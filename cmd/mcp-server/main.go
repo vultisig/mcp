@@ -3,11 +3,13 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/vultisig/mcp/internal/config"
 	"github.com/vultisig/mcp/internal/ethereum"
+	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -18,29 +20,37 @@ func main() {
 
 	cfg := config.Load()
 
+	logger := log.New(os.Stderr, "[mcp] ", log.LstdFlags|log.Lmicroseconds)
+
 	ethClient, err := ethereum.NewClient(cfg.ETHRPCURL)
 	if err != nil {
-		log.Fatalf("failed to create ethereum client: %v", err)
+		logger.Fatalf("failed to create ethereum client: %v", err)
 	}
 	defer ethClient.Close()
 
 	store := vault.NewStore()
 
+	hooks := mcplog.NewHooks(logger)
+
 	s := server.NewMCPServer("vultisig-mcp", "0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithHooks(hooks),
+		server.WithToolHandlerMiddleware(mcplog.NewToolMiddleware(logger)),
+		server.WithRecovery(),
 	)
 
 	tools.RegisterAll(s, store, ethClient)
 
 	if *httpAddr != "" {
 		httpServer := server.NewStreamableHTTPServer(s)
-		log.Printf("MCP server listening on %s/mcp", *httpAddr)
+		logger.Printf("listening on %s/mcp (HTTP mode)", *httpAddr)
 		if err := httpServer.Start(*httpAddr); err != nil {
-			log.Fatalf("http server error: %v", err)
+			logger.Fatalf("http server error: %v", err)
 		}
 	} else {
+		logger.Printf("serving on stdio")
 		if err := server.ServeStdio(s); err != nil {
-			log.Fatalf("server error: %v", err)
+			logger.Fatalf("server error: %v", err)
 		}
 	}
 }
