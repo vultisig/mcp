@@ -9,6 +9,7 @@ import (
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
+	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -71,7 +72,7 @@ func handleGetAddress(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain %q: %v", chainName, err)), nil
 		}
 
-		sessionID := sessionIDFromCtx(ctx)
+		sessionID := resolve.SessionIDFromCtx(ctx)
 		v, ok := store.Get(sessionID)
 		if !ok {
 			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil

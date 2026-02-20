@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
@@ -28,6 +29,12 @@ func main() {
 	}
 	defer ethClient.Close()
 
+	chainID, err := ethClient.ChainID(context.Background())
+	if err != nil {
+		logger.Fatalf("failed to detect chain ID: %v", err)
+	}
+	logger.Printf("connected to chain %s (RPC: %s)", chainID.String(), cfg.ETHRPCURL)
+
 	store := vault.NewStore()
 
 	hooks := mcplog.NewHooks(logger)
@@ -39,7 +46,7 @@ func main() {
 		server.WithRecovery(),
 	)
 
-	tools.RegisterAll(s, store, ethClient)
+	tools.RegisterAll(s, store, ethClient, chainID)
 
 	if *httpAddr != "" {
 		httpServer := server.NewStreamableHTTPServer(s)

@@ -2,14 +2,12 @@ package ethereum
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
@@ -51,7 +49,7 @@ func (c *Client) GetETHBalance(ctx context.Context, addr string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("get eth balance: %w", err)
 	}
-	return formatWei(balance, 18), nil
+	return FormatUnits(balance, 18), nil
 }
 
 // GetTokenBalance returns the ERC-20 token balance, symbol, and decimals.
@@ -80,7 +78,7 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAddr, holderAddr stri
 	if err != nil {
 		return nil, fmt.Errorf("call symbol(): %w", err)
 	}
-	symbol, err := decodeABIString(symbolData)
+	symbol, err := DecodeABIString(symbolData)
 	if err != nil {
 		return nil, fmt.Errorf("decode symbol: %w", err)
 	}
@@ -103,67 +101,73 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAddr, holderAddr stri
 	balance := new(big.Int).SetBytes(balanceData)
 
 	return &TokenBalance{
-		Balance:  formatWei(balance, int(decimals)),
+		Balance:  FormatUnits(balance, int(decimals)),
 		Symbol:   symbol,
 		Decimals: decimals,
 	}, nil
 }
 
-// formatWei formats a wei-denominated value into a decimal string.
-func formatWei(wei *big.Int, decimals int) string {
-	if wei.Sign() == 0 {
-		return "0"
-	}
-
-	divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(decimals)), nil)
-	whole := new(big.Int).Div(wei, divisor)
-	remainder := new(big.Int).Mod(wei, divisor)
-
-	if remainder.Sign() == 0 {
-		return whole.String()
-	}
-
-	// Pad remainder with leading zeros to `decimals` width, then trim trailing zeros.
-	fracStr := fmt.Sprintf("%0*s", decimals, remainder.String())
-	fracStr = strings.TrimRight(fracStr, "0")
-
-	return whole.String() + "." + fracStr
+// ChainID returns the chain ID of the connected network.
+func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
+	return c.eth.ChainID(ctx)
 }
 
-// decodeABIString decodes an ABI-encoded string from contract return data.
-// Handles both standard ABI encoding (offset+length+data) and non-standard
-// encodings (e.g. bytes32 left-padded strings like MKR).
-func decodeABIString(data []byte) (string, error) {
-	if len(data) < 32 {
-		return "", fmt.Errorf("data too short: %d bytes", len(data))
-	}
-
-	// Try standard ABI decoding: first 32 bytes = offset, then length, then data.
-	offset := new(big.Int).SetBytes(data[:32])
-	if offset.Cmp(big.NewInt(int64(len(data)))) < 0 && offset.Int64() >= 32 {
-		off := int(offset.Int64())
-		if off+32 <= len(data) {
-			length := binary.BigEndian.Uint64(data[off+24 : off+32])
-			if off+32+int(length) <= len(data) {
-				return string(data[off+32 : off+32+int(length)]), nil
-			}
-		}
-	}
-
-	// Fallback: treat as bytes32 (null-terminated or right-padded).
-	s := strings.TrimRight(string(data[:32]), "\x00")
-	if isPrintable(s) && len(s) > 0 {
-		return s, nil
-	}
-
-	return "", fmt.Errorf("unable to decode string from: 0x%s", hex.EncodeToString(data))
+// CallContract executes a read-only contract call.
+func (c *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
+	return c.eth.CallContract(ctx, msg, block)
 }
 
-func isPrintable(s string) bool {
-	for _, r := range s {
-		if r < 0x20 || r > 0x7e {
-			return false
-		}
-	}
-	return true
+// PendingNonceAt returns the next nonce for the account at the pending state.
+func (c *Client) PendingNonceAt(ctx context.Context, account ethcommon.Address) (uint64, error) {
+	return c.eth.PendingNonceAt(ctx, account)
 }
+
+// SuggestGasPrice returns the currently suggested gas price.
+func (c *Client) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
+	return c.eth.SuggestGasPrice(ctx)
+}
+
+// EstimateGas estimates the gas needed to execute a transaction.
+func (c *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+	return c.eth.EstimateGas(ctx, msg)
+}
+
+// BuildUnsignedTx constructs a fully populated unsigned transaction, estimating
+// gas and querying gas price from the chain. Returns the RLP-encoded hex string.
+func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address, data []byte, value *big.Int, chainID *big.Int, nonce uint64) (string, *types.Transaction, error) {
+	gasPrice, err := c.SuggestGasPrice(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("suggest gas price: %w", err)
+	}
+
+	gas, err := c.EstimateGas(ctx, ethereum.CallMsg{
+		From:     from,
+		To:       &to,
+		Data:     data,
+		Value:    value,
+		GasPrice: gasPrice,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("estimate gas: %w", err)
+	}
+
+	// Apply 20% safety margin.
+	gas = gas * 120 / 100
+
+	tx := types.NewTx(&types.LegacyTx{
+		Nonce:    nonce,
+		GasPrice: gasPrice,
+		Gas:      gas,
+		To:       &to,
+		Value:    value,
+		Data:     data,
+	})
+
+	rawBytes, err := tx.MarshalBinary()
+	if err != nil {
+		return "", nil, fmt.Errorf("marshal tx: %w", err)
+	}
+
+	return "0x" + fmt.Sprintf("%x", rawBytes), tx, nil
+}
+

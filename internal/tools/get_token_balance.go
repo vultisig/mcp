@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/vultisig/mcp/internal/ethereum"
+	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -32,7 +33,7 @@ func handleGetTokenBalance(store *vault.Store, ethClient *ethereum.Client) serve
 		}
 
 		explicit := req.GetString("address", "")
-		addr, err := resolveAddr(explicit, sessionIDFromCtx(ctx), store)
+		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

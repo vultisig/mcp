@@ -8,6 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/vultisig/mcp/internal/ethereum"
+	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -24,7 +25,7 @@ func handleGetETHBalance(store *vault.Store, ethClient *ethereum.Client) server.
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 
-		addr, err := resolveAddr(explicit, sessionIDFromCtx(ctx), store)
+		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -36,18 +37,4 @@ func handleGetETHBalance(store *vault.Store, ethClient *ethereum.Client) server.
 
 		return mcp.NewToolResultText(fmt.Sprintf("Address: %s\nBalance: %s ETH", addr, balance)), nil
 	}
-}
-
-// resolveAddr resolves an address from explicit param or vault derivation.
-func resolveAddr(explicit, sessionID string, store *vault.Store) (string, error) {
-	if explicit != "" {
-		return explicit, nil
-	}
-
-	v, ok := store.Get(sessionID)
-	if !ok {
-		return "", fmt.Errorf("no address provided and no vault info set for this session — call set_vault_info first")
-	}
-
-	return resolveAddress("", v)
 }

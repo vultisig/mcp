@@ -53,9 +53,9 @@ func TestFormatWei(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := formatWei(tt.wei, tt.decimals)
+			got := FormatUnits(tt.wei, tt.decimals)
 			if got != tt.want {
-				t.Errorf("formatWei(%s, %d) = %q, want %q", tt.wei, tt.decimals, got, tt.want)
+				t.Errorf("FormatUnits(%s, %d) = %q, want %q", tt.wei, tt.decimals, got, tt.want)
 			}
 		})
 	}
@@ -72,7 +72,7 @@ func TestDecodeABIString(t *testing.T) {
 		// "USDC"
 		copy(data[64:], "USDC")
 
-		got, err := decodeABIString(data)
+		got, err := DecodeABIString(data)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -86,7 +86,7 @@ func TestDecodeABIString(t *testing.T) {
 		data := make([]byte, 32)
 		copy(data, "MKR")
 
-		got, err := decodeABIString(data)
+		got, err := DecodeABIString(data)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -96,7 +96,7 @@ func TestDecodeABIString(t *testing.T) {
 	})
 
 	t.Run("too short", func(t *testing.T) {
-		_, err := decodeABIString([]byte{0x01, 0x02})
+		_, err := DecodeABIString([]byte{0x01, 0x02})
 		if err == nil {
 			t.Fatal("expected error for short data")
 		}
@@ -112,7 +112,7 @@ func TestDecodeABIString(t *testing.T) {
 		// data
 		copy(data[64:], name)
 
-		got, err := decodeABIString(data)
+		got, err := DecodeABIString(data)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

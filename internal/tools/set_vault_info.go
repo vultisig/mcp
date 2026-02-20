@@ -6,6 +6,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -42,7 +43,7 @@ func handleSetVaultInfo(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError("missing chain_code"), nil
 		}
 
-		sessionID := sessionIDFromCtx(ctx)
+		sessionID := resolve.SessionIDFromCtx(ctx)
 		store.Set(sessionID, vault.Info{
 			ECDSAPublicKey: ecdsa,
 			EdDSAPublicKey: eddsa,
@@ -51,11 +52,4 @@ func handleSetVaultInfo(store *vault.Store) server.ToolHandlerFunc {
 
 		return mcp.NewToolResultText("vault info stored for session"), nil
 	}
-}
-
-func sessionIDFromCtx(ctx context.Context) string {
-	if sess := server.ClientSessionFromContext(ctx); sess != nil {
-		return sess.SessionID()
-	}
-	return "default"
 }
