@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/vultisig/mcp/internal/ethereum"
+	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -21,7 +23,7 @@ const (
 	gasLimitRepay  = 300_000
 )
 
-// Protocol implements the protocols.Protocol interface for Aave V3.
+// Protocol implements the types.Protocol interface for Aave V3.
 type Protocol struct{}
 
 func (p *Protocol) Name() string { return "aave-v3" }
@@ -95,6 +97,36 @@ func newGetRatesTool() mcp.Tool {
 	)
 }
 
+// --- helpers ---
+
+// stripHexPrefix removes a leading "0x" or "0X" from a hex string.
+func stripHexPrefix(s string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+}
+
+// evmTxDetails builds the tx_details map for an EVM transaction.
+func evmTxDetails(to string, nonce uint64, gasLimit uint64, gasPrice string, data string, description string) map[string]string {
+	return map[string]string{
+		"to":          to,
+		"value":       "0",
+		"nonce":       fmt.Sprintf("%d", nonce),
+		"gas_limit":   fmt.Sprintf("%d", gasLimit),
+		"gas_price":   gasPrice,
+		"data":        data,
+		"tx_encoding": types.TxEncodingLegacyRLP,
+		"description": description,
+	}
+}
+
+// addTokenFields adds the common token metadata fields to a tx_details map.
+func addTokenFields(m map[string]string, symbol, tokenAddr, amountHuman, amountWei, decimals string) {
+	m["token_symbol"] = symbol
+	m["token_address"] = tokenAddr
+	m["amount_human"] = amountHuman
+	m["amount_wei"] = amountWei
+	m["decimals"] = decimals
+}
+
 // --- Tool handlers ---
 
 func handleDeposit(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolClient, chainID *big.Int) server.ToolHandlerFunc {
@@ -118,7 +150,6 @@ func handleDeposit(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolC
 		user := ethcommon.HexToAddress(addr)
 		pool := pc.PoolAddress()
 
-		// Query token info.
 		decimals, err := pc.GetTokenDecimals(ctx, asset)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get token decimals: %v", err)), nil
@@ -133,68 +164,44 @@ func handleDeposit(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolC
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
 
-		// Get nonce.
 		nonce, err := ethClient.PendingNonceAt(ctx, user)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Tx 1: approve(Pool, amount) on asset token — gas can be estimated.
+		chainName := types.EVMChainName(chainID)
+		chainIDStr := chainID.String()
+		assetChecksummed := asset.Hex()
+		poolChecksummed := pool.Hex()
+		decimalsStr := fmt.Sprintf("%d", decimals)
+
+		// Tx 1: approve
 		approveData := EncodeApprove(pool, amount)
 		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
 		}
+		approveDets := evmTxDetails(assetChecksummed, nonce, approveTx.Gas(), approveTx.GasPrice().String(), fmt.Sprintf("0x%x", approveData), fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol))
+		approveDets["contract_name"] = fmt.Sprintf("%s Token", symbol)
+		addTokenFields(approveDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
 
-		// Tx 2: supply(asset, amount, user, 0) on Pool — depends on approve,
-		// so gas estimation would revert; use a fixed gas limit.
+		// Tx 2: supply (depends on approve — fixed gas)
 		supplyData := EncodeSupply(asset, amount, user)
 		supplyHex, supplyTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, supplyData, big.NewInt(0), chainID, nonce+1, gasLimitSupply)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build supply tx: %v", err)), nil
 		}
+		supplyDets := evmTxDetails(poolChecksummed, nonce+1, supplyTx.Gas(), supplyTx.GasPrice().String(), fmt.Sprintf("0x%x", supplyData), fmt.Sprintf("Supply %s to Aave V3", symbol))
+		supplyDets["contract_name"] = "Aave V3 Pool"
+		addTokenFields(supplyDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
 
-		result := fmt.Sprintf(`Aave V3 Deposit
-Chain ID: %s
-Asset: %s (%s)
-Amount: %s (%s wei, %d decimals)
-User: %s
-
-Transaction 1 of 2 — Approve %s:
-  To: %s (asset token)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Transaction 2 of 2 — Supply to Aave V3:
-  To: %s (Pool)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Sign each unsigned raw transaction and broadcast in order.`,
-			chainID.String(),
-			assetStr, symbol,
-			amountStr, amount.String(), decimals,
-			addr,
-			symbol,
-			assetStr,
-			nonce, approveTx.Gas(), approveTx.GasPrice().String(),
-			approveData,
-			approveHex,
-			pool.Hex(),
-			nonce+1, supplyTx.Gas(), supplyTx.GasPrice().String(),
-			supplyData,
-			supplyHex,
-		)
-
-		return mcp.NewToolResultText(result), nil
+		result := &types.TransactionResult{
+			Transactions: []types.Transaction{
+				{Sequence: 1, Chain: chainName, ChainID: chainIDStr, Action: "approve", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(approveHex), TxDetails: approveDets},
+				{Sequence: 2, Chain: chainName, ChainID: chainIDStr, Action: "supply", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(supplyHex), TxDetails: supplyDets},
+			},
+		}
+		return result.ToToolResult()
 	}
 }
 
@@ -238,40 +245,22 @@ func handleWithdraw(store *vault.Store, ethClient *ethereum.Client, pc *Protocol
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Standalone tx — gas can be estimated normally.
 		withdrawData := EncodeWithdraw(asset, amount, user)
 		withdrawHex, withdrawTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, withdrawData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build withdraw tx: %v", err)), nil
 		}
 
-		result := fmt.Sprintf(`Aave V3 Withdraw
-Chain ID: %s
-Asset: %s (%s)
-Amount: %s (%s wei, %d decimals)
-User: %s
+		dets := evmTxDetails(pool.Hex(), nonce, withdrawTx.Gas(), withdrawTx.GasPrice().String(), fmt.Sprintf("0x%x", withdrawData), fmt.Sprintf("Withdraw %s from Aave V3", symbol))
+		dets["contract_name"] = "Aave V3 Pool"
+		addTokenFields(dets, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 
-Transaction 1 of 1 — Withdraw from Aave V3:
-  To: %s (Pool)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Sign the unsigned raw transaction and broadcast.`,
-			chainID.String(),
-			assetStr, symbol,
-			amountStr, amount.String(), decimals,
-			addr,
-			pool.Hex(),
-			nonce, withdrawTx.Gas(), withdrawTx.GasPrice().String(),
-			withdrawData,
-			withdrawHex,
-		)
-
-		return mcp.NewToolResultText(result), nil
+		result := &types.TransactionResult{
+			Transactions: []types.Transaction{
+				{Sequence: 1, Chain: types.EVMChainName(chainID), ChainID: chainID.String(), Action: "withdraw", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(withdrawHex), TxDetails: dets},
+			},
+		}
+		return result.ToToolResult()
 	}
 }
 
@@ -315,41 +304,22 @@ func handleBorrow(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolCl
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Standalone tx — gas can be estimated normally.
 		borrowData := EncodeBorrow(asset, amount, user)
 		borrowHex, borrowTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, borrowData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build borrow tx: %v", err)), nil
 		}
 
-		result := fmt.Sprintf(`Aave V3 Borrow
-Chain ID: %s
-Asset: %s (%s)
-Amount: %s (%s wei, %d decimals)
-Interest Rate: Variable
-User: %s
+		dets := evmTxDetails(pool.Hex(), nonce, borrowTx.Gas(), borrowTx.GasPrice().String(), fmt.Sprintf("0x%x", borrowData), fmt.Sprintf("Borrow %s from Aave V3 (variable rate)", symbol))
+		dets["contract_name"] = "Aave V3 Pool"
+		addTokenFields(dets, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 
-Transaction 1 of 1 — Borrow from Aave V3:
-  To: %s (Pool)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Sign the unsigned raw transaction and broadcast.`,
-			chainID.String(),
-			assetStr, symbol,
-			amountStr, amount.String(), decimals,
-			addr,
-			pool.Hex(),
-			nonce, borrowTx.Gas(), borrowTx.GasPrice().String(),
-			borrowData,
-			borrowHex,
-		)
-
-		return mcp.NewToolResultText(result), nil
+		result := &types.TransactionResult{
+			Transactions: []types.Transaction{
+				{Sequence: 1, Chain: types.EVMChainName(chainID), ChainID: chainID.String(), Action: "borrow", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(borrowHex), TxDetails: dets},
+			},
+		}
+		return result.ToToolResult()
 	}
 }
 
@@ -393,63 +363,39 @@ func handleRepay(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolCli
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		// Tx 1: approve(Pool, amount) on asset token — gas can be estimated.
+		chainName := types.EVMChainName(chainID)
+		chainIDStr := chainID.String()
+		assetChecksummed := asset.Hex()
+		poolChecksummed := pool.Hex()
+		decimalsStr := fmt.Sprintf("%d", decimals)
+
+		// Tx 1: approve
 		approveData := EncodeApprove(pool, amount)
 		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
 		}
+		approveDets := evmTxDetails(assetChecksummed, nonce, approveTx.Gas(), approveTx.GasPrice().String(), fmt.Sprintf("0x%x", approveData), fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol))
+		approveDets["contract_name"] = fmt.Sprintf("%s Token", symbol)
+		addTokenFields(approveDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
 
-		// Tx 2: repay(asset, amount, 2, user) on Pool — depends on approve,
-		// so gas estimation would revert; use a fixed gas limit.
+		// Tx 2: repay (depends on approve — fixed gas)
 		repayData := EncodeRepay(asset, amount, user)
 		repayHex, repayTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, repayData, big.NewInt(0), chainID, nonce+1, gasLimitRepay)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build repay tx: %v", err)), nil
 		}
+		repayDets := evmTxDetails(poolChecksummed, nonce+1, repayTx.Gas(), repayTx.GasPrice().String(), fmt.Sprintf("0x%x", repayData), fmt.Sprintf("Repay %s to Aave V3 (variable rate)", symbol))
+		repayDets["contract_name"] = "Aave V3 Pool"
+		addTokenFields(repayDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
 
-		result := fmt.Sprintf(`Aave V3 Repay
-Chain ID: %s
-Asset: %s (%s)
-Amount: %s (%s wei, %d decimals)
-Interest Rate: Variable
-User: %s
-
-Transaction 1 of 2 — Approve %s:
-  To: %s (asset token)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Transaction 2 of 2 — Repay to Aave V3:
-  To: %s (Pool)
-  Value: 0
-  Nonce: %d
-  Gas Limit: %d
-  Gas Price: %s wei
-  Data: 0x%x
-  Unsigned Raw Tx: %s
-
-Sign each unsigned raw transaction and broadcast in order.`,
-			chainID.String(),
-			assetStr, symbol,
-			amountStr, amount.String(), decimals,
-			addr,
-			symbol,
-			assetStr,
-			nonce, approveTx.Gas(), approveTx.GasPrice().String(),
-			approveData,
-			approveHex,
-			pool.Hex(),
-			nonce+1, repayTx.Gas(), repayTx.GasPrice().String(),
-			repayData,
-			repayHex,
-		)
-
-		return mcp.NewToolResultText(result), nil
+		result := &types.TransactionResult{
+			Transactions: []types.Transaction{
+				{Sequence: 1, Chain: chainName, ChainID: chainIDStr, Action: "approve", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(approveHex), TxDetails: approveDets},
+				{Sequence: 2, Chain: chainName, ChainID: chainIDStr, Action: "repay", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(repayHex), TxDetails: repayDets},
+			},
+		}
+		return result.ToToolResult()
 	}
 }
 
