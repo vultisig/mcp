@@ -6,8 +6,15 @@
 go build ./cmd/mcp-server/       # Build
 go test ./...                     # Run all tests
 go vet ./...                      # Lint
-ETH_RPC_URL=https://ethereum-rpc.publicnode.com ./mcp-server  # Run (stdio transport)
+./mcp-server                      # Run (stdio transport, default)
+./mcp-server -http :8080          # Run (HTTP transport on port 8080)
 ```
+
+## Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-http` | (empty) | HTTP listen address (e.g. `:8080`). If empty, serves over stdio. |
 
 ## Environment Variables
 

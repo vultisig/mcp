@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -12,6 +13,9 @@ import (
 )
 
 func main() {
+	httpAddr := flag.String("http", "", "HTTP listen address (e.g. :8080). If empty, serves over stdio.")
+	flag.Parse()
+
 	cfg := config.Load()
 
 	ethClient, err := ethereum.NewClient(cfg.ETHRPCURL)
@@ -28,7 +32,15 @@ func main() {
 
 	tools.RegisterAll(s, store, ethClient)
 
-	if err := server.ServeStdio(s); err != nil {
-		log.Fatalf("server error: %v", err)
+	if *httpAddr != "" {
+		httpServer := server.NewStreamableHTTPServer(s)
+		log.Printf("MCP server listening on %s/mcp", *httpAddr)
+		if err := httpServer.Start(*httpAddr); err != nil {
+			log.Fatalf("http server error: %v", err)
+		}
+	} else {
+		if err := server.ServeStdio(s); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
 	}
 }

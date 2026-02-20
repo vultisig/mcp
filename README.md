@@ -1,6 +1,6 @@
 # Vultisig MCP Server
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes Vultisig vault operations and Ethereum balance queries to LLM-powered agents. Communicates over stdio transport.
+An [MCP](https://modelcontextprotocol.io/) server that exposes Vultisig vault operations and Ethereum balance queries to LLM-powered agents. Supports both stdio and HTTP transports.
 
 ## Quick Start
 
@@ -8,11 +8,14 @@ An [MCP](https://modelcontextprotocol.io/) server that exposes Vultisig vault op
 # Build
 go build -o mcp-server ./cmd/mcp-server/
 
-# Run (uses public Ethereum RPC by default)
+# Run over stdio (default)
 ./mcp-server
 
-# Or with a custom RPC endpoint
-ETH_RPC_URL=https://your-rpc.example.com ./mcp-server
+# Run over HTTP on port 8080
+./mcp-server -http :8080
+
+# With a custom RPC endpoint
+ETH_RPC_URL=https://your-rpc.example.com ./mcp-server -http :8080
 ```
 
 ## Tools
@@ -46,6 +49,8 @@ Query an ERC-20 token balance. Derives the holder address from vault keys if not
 
 ## MCP Client Configuration
 
+### Stdio (default)
+
 ```json
 {
   "mcpServers": {
@@ -54,6 +59,25 @@ Query an ERC-20 token balance. Derives the holder address from vault keys if not
       "env": {
         "ETH_RPC_URL": "https://ethereum-rpc.publicnode.com"
       }
+    }
+  }
+}
+```
+
+### HTTP
+
+```bash
+# Start the server
+./mcp-server -http :8080
+
+# MCP endpoint: POST/GET/DELETE http://localhost:8080/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "vultisig": {
+      "url": "http://localhost:8080/mcp"
     }
   }
 }

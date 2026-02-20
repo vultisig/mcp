@@ -39,4 +39,5 @@ Thumbs.db
 logs/
 
 .devenv
-config.jsonmcp-server
+config.json
+/mcp-server
