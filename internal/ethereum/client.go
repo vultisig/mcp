@@ -161,6 +161,9 @@ func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address
 		gas = gas * 120 / 100
 	}
 
+	// Set V = chainID so the RLP encoding produces the EIP-155 unsigned
+	// payload: RLP([nonce, gasPrice, gas, to, value, data, chainID, 0, 0]).
+	// The signer hashes these bytes directly to get the signing hash.
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
 		GasPrice: gasPrice,
@@ -168,6 +171,9 @@ func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address
 		To:       &to,
 		Value:    value,
 		Data:     data,
+		V:        new(big.Int).Set(chainID),
+		R:        new(big.Int),
+		S:        new(big.Int),
 	})
 
 	rawBytes, err := tx.MarshalBinary()
