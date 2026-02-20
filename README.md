@@ -30,6 +30,16 @@ Store vault key material for the current session. Must be called before vault-de
 | `eddsa_public_key` | Yes | Hex-encoded EdDSA public key (64 hex chars) |
 | `chain_code` | Yes | Hex-encoded 32-byte chain code for BIP-32 derivation |
 
+### `get_address`
+
+Derive the address for a given blockchain network from the vault's key material. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `chain` | Yes | Blockchain network name (see supported chains below) |
+
+Supported chains: Arbitrum, Avalanche, Base, Bitcoin, Bitcoin-Cash, Blast, BSC, Cosmos, CronosChain, Dash, Dogecoin, Dydx, Ethereum, Kujira, Litecoin, Mantle, MayaChain, Noble, Optimism, Osmosis, Polygon, Ripple, Solana, Sui, Terra, TerraClassic, THORChain, Tron, Zcash, Zksync.
+
 ### `get_eth_balance`
 
 Query the native ETH balance. Derives the address from vault keys if not provided.

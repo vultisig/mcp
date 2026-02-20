@@ -34,6 +34,7 @@ internal/tools/
   tools.go                       # RegisterAll() orchestrator
   resolve.go                     # Shared address resolution (explicit or vault-derived)
   set_vault_info.go              # Store vault keys in session
+  get_address.go                 # Derive address for any supported chain
   get_eth_balance.go             # Query native ETH balance
   get_token_balance.go           # Query ERC-20 token balance
 ```
