@@ -21,6 +21,7 @@ go vet ./...                      # Lint
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ETH_RPC_URL` | `https://ethereum-rpc.publicnode.com` | Ethereum JSON-RPC endpoint |
+| `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 
 ## Architecture
 
@@ -37,6 +38,8 @@ internal/tools/
   get_address.go                 # Derive address for any supported chain
   get_eth_balance.go             # Query native ETH balance
   get_token_balance.go           # Query ERC-20 token balance
+  find_token.go                  # Token discovery via CoinGecko API
+internal/coingecko/client.go     # CoinGecko REST API client
 ```
 
 ## Key Dependencies

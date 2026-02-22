@@ -5,7 +5,8 @@ import "os"
 const defaultETHRPCURL = "https://ethereum-rpc.publicnode.com"
 
 type Config struct {
-	ETHRPCURL string
+	ETHRPCURL        string
+	CoinGeckoAPIKey  string
 }
 
 func Load() Config {
@@ -14,6 +15,7 @@ func Load() Config {
 		rpcURL = defaultETHRPCURL
 	}
 	return Config{
-		ETHRPCURL: rpcURL,
+		ETHRPCURL:       rpcURL,
+		CoinGeckoAPIKey: os.Getenv("COINGECKO_API_KEY"),
 	}
 }
