@@ -65,8 +65,9 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.Handle("/mcp", mcpHandler)
-		mux.Handle("/skills", skills.NewHandler())
-		mux.Handle("/skills/", skills.NewHandler())
+		skillHandler := skills.NewHandler(logger)
+		mux.Handle("/skills", skillHandler)
+		mux.Handle("/skills/", skillHandler)
 
 		logger.Printf("listening on %s (HTTP mode)", *httpAddr)
 		srv := &http.Server{Addr: *httpAddr, Handler: mux}

@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -93,13 +95,47 @@ func parseFrontmatter(data []byte) frontmatter {
 // NewHandler returns an http.Handler that serves:
 //   - GET /skills — JSON array of skill metadata
 //   - GET /skills/{name}.md — raw markdown content
-func NewHandler() http.Handler {
+func NewHandler(logger *log.Logger) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /skills", handleList)
-	mux.HandleFunc("GET /skills/{file}", handleFile)
+	mux.HandleFunc("GET /skills", logged(logger, "list", handleList))
+	mux.HandleFunc("GET /skills/{file}", logged(logger, "get", handleFile))
 
 	return mux
+}
+
+// logged wraps an HTTP handler with request/response logging that mirrors
+// the [CALL]/[OK]/[FAIL] format used by the MCP tool middleware.
+func logged(logger *log.Logger, action string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		file := r.PathValue("file")
+		if file == "" {
+			file = "*"
+		}
+		logger.Printf("[CALL]  skill=%-20s action=%-5s remote=%s", file, action, r.RemoteAddr)
+
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		start := time.Now()
+		next(rec, r)
+		duration := time.Since(start)
+
+		if rec.status >= 400 {
+			logger.Printf("[FAIL]  skill=%-20s action=%-5s duration=%-12s status=%d", file, action, duration, rec.status)
+		} else {
+			logger.Printf("[OK]    skill=%-20s action=%-5s duration=%-12s status=%d", file, action, duration, rec.status)
+		}
+	}
+}
+
+// statusRecorder captures the HTTP status code written by downstream handlers.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
 }
 
 func handleList(w http.ResponseWriter, r *http.Request) {
