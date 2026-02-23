@@ -30,6 +30,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, ethClient *ethereum.Cl
 	s.AddTool(newABIDecodeTool(), handleABIDecode())
 	s.AddTool(newEVMCallTool(), handleEVMCall(ethClient))
 	s.AddTool(newEVMTxInfoTool(), handleEVMTxInfo(store, ethClient, chainID))
+	s.AddTool(newBuildEVMTxTool(), handleBuildEVMTx(chainID))
 
 	protocols.RegisterAll(s, store, ethClient, evmSDK, chainID)
 }
