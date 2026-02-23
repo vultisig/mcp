@@ -2,50 +2,51 @@ package aavev3
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	reth "github.com/vultisig/recipes/chain/evm/ethereum"
+	"github.com/vultisig/recipes/sdk/evm"
+	aavev3sdk "github.com/vultisig/recipes/sdk/evm/aavev3"
+
 	"github.com/vultisig/mcp/internal/ethereum"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-// Default gas limits for transactions that follow an approve and therefore
-// cannot be estimated against current on-chain state.
 const (
 	gasLimitSupply = 300_000
 	gasLimitRepay  = 300_000
 )
 
-// Protocol implements the types.Protocol interface for Aave V3.
 type Protocol struct{}
 
 func (p *Protocol) Name() string { return "aave-v3" }
 
 func (p *Protocol) SupportsChain(chainID *big.Int) bool {
-	_, ok := GetDeployment(chainID)
+	_, ok := aavev3sdk.GetDeployment(chainID)
 	return ok
 }
 
-func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *ethereum.Client, chainID *big.Int) {
-	deploy, _ := GetDeployment(chainID)
-	pc := NewProtocolClient(ethClient, deploy)
+func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *ethereum.Client, evmSDK *evm.SDK, chainID *big.Int) {
+	deploy, _ := aavev3sdk.GetDeployment(chainID)
+	aaveClient := aavev3sdk.NewClient(ethClient, deploy)
 
-	s.AddTool(newDepositTool(), handleDeposit(store, ethClient, pc, chainID))
-	s.AddTool(newWithdrawTool(), handleWithdraw(store, ethClient, pc, chainID))
-	s.AddTool(newBorrowTool(), handleBorrow(store, ethClient, pc, chainID))
-	s.AddTool(newRepayTool(), handleRepay(store, ethClient, pc, chainID))
-	s.AddTool(newGetBalancesTool(), handleGetBalances(store, pc))
-	s.AddTool(newGetRatesTool(), handleGetRates(pc))
+	s.AddTool(newDepositTool(), handleDeposit(store, evmSDK, aaveClient, chainID))
+	s.AddTool(newWithdrawTool(), handleWithdraw(store, evmSDK, aaveClient, chainID))
+	s.AddTool(newBorrowTool(), handleBorrow(store, evmSDK, aaveClient, chainID))
+	s.AddTool(newRepayTool(), handleRepay(store, evmSDK, aaveClient, chainID))
+	s.AddTool(newGetBalancesTool(), handleGetBalances(store, aaveClient))
+	s.AddTool(newGetRatesTool(), handleGetRates(aaveClient))
 }
-
-// --- Tool definitions ---
 
 func newDepositTool() mcp.Tool {
 	return mcp.NewTool("aave_v3_deposit",
@@ -97,28 +98,24 @@ func newGetRatesTool() mcp.Tool {
 	)
 }
 
-// --- helpers ---
-
-// stripHexPrefix removes a leading "0x" or "0X" from a hex string.
 func stripHexPrefix(s string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
 }
 
-// evmTxDetails builds the tx_details map for an EVM transaction.
-func evmTxDetails(to string, nonce uint64, gasLimit uint64, gasPrice string, data string, description string) map[string]string {
+func evmTxDetails(to string, nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, data string, description string) map[string]string {
 	return map[string]string{
-		"to":          to,
-		"value":       "0",
-		"nonce":       fmt.Sprintf("%d", nonce),
-		"gas_limit":   fmt.Sprintf("%d", gasLimit),
-		"gas_price":   gasPrice,
-		"data":        data,
-		"tx_encoding": types.TxEncodingLegacyRLP,
-		"description": description,
+		"to":                     to,
+		"value":                  "0",
+		"nonce":                  fmt.Sprintf("%d", nonce),
+		"gas_limit":             fmt.Sprintf("%d", gasLimit),
+		"max_fee_per_gas":       maxFeePerGas,
+		"max_priority_fee_per_gas": maxPriorityFeePerGas,
+		"data":                  data,
+		"tx_encoding":           types.TxEncodingEIP1559RLP,
+		"description":           description,
 	}
 }
 
-// addTokenFields adds the common token metadata fields to a tx_details map.
 func addTokenFields(m map[string]string, symbol, tokenAddr, amountHuman, amountWei, decimals string) {
 	m["token_symbol"] = symbol
 	m["token_address"] = tokenAddr
@@ -127,279 +124,165 @@ func addTokenFields(m map[string]string, symbol, tokenAddr, amountHuman, amountW
 	m["decimals"] = decimals
 }
 
-// --- Tool handlers ---
+type txBuildAction struct {
+	action       string
+	description  string
+	contractName string
+}
 
-func handleDeposit(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolClient, chainID *big.Int) server.ToolHandlerFunc {
+func handleDeposit(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		assetStr, err := req.RequireString("asset")
-		if err != nil {
-			return mcp.NewToolResultError("missing asset"), nil
-		}
-		amountStr, err := req.RequireString("amount")
-		if err != nil {
-			return mcp.NewToolResultError("missing amount"), nil
-		}
-		explicit := req.GetString("address", "")
-
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		asset := ethcommon.HexToAddress(assetStr)
 		user := ethcommon.HexToAddress(addr)
-		pool := pc.PoolAddress()
 
-		decimals, err := pc.GetTokenDecimals(ctx, asset)
+		txs, err := aavev3sdk.BuildDepositTx(ctx, aaveClient, asset, amountStr, user)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token decimals: %v", err)), nil
-		}
-		symbol, err := pc.GetTokenSymbol(ctx, asset)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token symbol: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("build deposit: %v", err)), nil
 		}
 
-		amount, err := ParseAmount(amountStr, int(decimals))
+		symbol, err := aaveClient.GetTokenSymbol(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token symbol: %v", err)), nil
+		}
+		decimals, err := aaveClient.GetTokenDecimals(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token decimals: %v", err)), nil
+		}
+
+		amount, err := aavev3sdk.ParseAmount(amountStr, int(decimals))
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
 
-		nonce, err := ethClient.PendingNonceAt(ctx, user)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
+		actions := []txBuildAction{
+			{"approve", fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol), fmt.Sprintf("%s Token", symbol)},
+			{"supply", fmt.Sprintf("Supply %s to Aave V3", symbol), "Aave V3 Pool"},
 		}
+		gasOverrides := []uint64{0, gasLimitSupply}
 
-		chainName := types.EVMChainName(chainID)
-		chainIDStr := chainID.String()
-		assetChecksummed := asset.Hex()
-		poolChecksummed := pool.Hex()
-		decimalsStr := fmt.Sprintf("%d", decimals)
-
-		// Tx 1: approve
-		approveData := EncodeApprove(pool, amount)
-		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
-		}
-		approveDets := evmTxDetails(assetChecksummed, nonce, approveTx.Gas(), approveTx.GasPrice().String(), fmt.Sprintf("0x%x", approveData), fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol))
-		approveDets["contract_name"] = fmt.Sprintf("%s Token", symbol)
-		addTokenFields(approveDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
-
-		// Tx 2: supply (depends on approve — fixed gas)
-		supplyData := EncodeSupply(asset, amount, user)
-		supplyHex, supplyTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, supplyData, big.NewInt(0), chainID, nonce+1, gasLimitSupply)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build supply tx: %v", err)), nil
-		}
-		supplyDets := evmTxDetails(poolChecksummed, nonce+1, supplyTx.Gas(), supplyTx.GasPrice().String(), fmt.Sprintf("0x%x", supplyData), fmt.Sprintf("Supply %s to Aave V3", symbol))
-		supplyDets["contract_name"] = "Aave V3 Pool"
-		addTokenFields(supplyDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
-
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{Sequence: 1, Chain: chainName, ChainID: chainIDStr, Action: "approve", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(approveHex), TxDetails: approveDets},
-				{Sequence: 2, Chain: chainName, ChainID: chainIDStr, Action: "supply", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(supplyHex), TxDetails: supplyDets},
-			},
-		}
-		return result.ToToolResult()
+		return buildTxResult(ctx, evmSDK, user, chainID, txs, actions, gasOverrides, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 	}
 }
 
-func handleWithdraw(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolClient, chainID *big.Int) server.ToolHandlerFunc {
+func handleWithdraw(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		assetStr, err := req.RequireString("asset")
-		if err != nil {
-			return mcp.NewToolResultError("missing asset"), nil
-		}
-		amountStr, err := req.RequireString("amount")
-		if err != nil {
-			return mcp.NewToolResultError("missing amount"), nil
-		}
-		explicit := req.GetString("address", "")
-
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		asset := ethcommon.HexToAddress(assetStr)
 		user := ethcommon.HexToAddress(addr)
-		pool := pc.PoolAddress()
 
-		decimals, err := pc.GetTokenDecimals(ctx, asset)
+		txs, err := aavev3sdk.BuildWithdrawTx(ctx, aaveClient, asset, amountStr, user)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token decimals: %v", err)), nil
-		}
-		symbol, err := pc.GetTokenSymbol(ctx, asset)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token symbol: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("build withdraw: %v", err)), nil
 		}
 
-		amount, err := ParseAmount(amountStr, int(decimals))
+		symbol, err := aaveClient.GetTokenSymbol(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token symbol: %v", err)), nil
+		}
+		decimals, err := aaveClient.GetTokenDecimals(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token decimals: %v", err)), nil
+		}
+
+		amount, err := aavev3sdk.ParseAmount(amountStr, int(decimals))
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
 
-		nonce, err := ethClient.PendingNonceAt(ctx, user)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
+		actions := []txBuildAction{
+			{"withdraw", fmt.Sprintf("Withdraw %s from Aave V3", symbol), "Aave V3 Pool"},
 		}
 
-		withdrawData := EncodeWithdraw(asset, amount, user)
-		withdrawHex, withdrawTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, withdrawData, big.NewInt(0), chainID, nonce, 0)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build withdraw tx: %v", err)), nil
-		}
-
-		dets := evmTxDetails(pool.Hex(), nonce, withdrawTx.Gas(), withdrawTx.GasPrice().String(), fmt.Sprintf("0x%x", withdrawData), fmt.Sprintf("Withdraw %s from Aave V3", symbol))
-		dets["contract_name"] = "Aave V3 Pool"
-		addTokenFields(dets, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
-
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{Sequence: 1, Chain: types.EVMChainName(chainID), ChainID: chainID.String(), Action: "withdraw", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(withdrawHex), TxDetails: dets},
-			},
-		}
-		return result.ToToolResult()
+		return buildTxResult(ctx, evmSDK, user, chainID, txs, actions, []uint64{0}, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 	}
 }
 
-func handleBorrow(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolClient, chainID *big.Int) server.ToolHandlerFunc {
+func handleBorrow(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		assetStr, err := req.RequireString("asset")
-		if err != nil {
-			return mcp.NewToolResultError("missing asset"), nil
-		}
-		amountStr, err := req.RequireString("amount")
-		if err != nil {
-			return mcp.NewToolResultError("missing amount"), nil
-		}
-		explicit := req.GetString("address", "")
-
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		asset := ethcommon.HexToAddress(assetStr)
 		user := ethcommon.HexToAddress(addr)
-		pool := pc.PoolAddress()
 
-		decimals, err := pc.GetTokenDecimals(ctx, asset)
+		txs, err := aavev3sdk.BuildBorrowTx(ctx, aaveClient, asset, amountStr, user)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token decimals: %v", err)), nil
-		}
-		symbol, err := pc.GetTokenSymbol(ctx, asset)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token symbol: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("build borrow: %v", err)), nil
 		}
 
-		amount, err := ParseAmount(amountStr, int(decimals))
+		symbol, err := aaveClient.GetTokenSymbol(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token symbol: %v", err)), nil
+		}
+		decimals, err := aaveClient.GetTokenDecimals(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token decimals: %v", err)), nil
+		}
+
+		amount, err := aavev3sdk.ParseAmount(amountStr, int(decimals))
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
 
-		nonce, err := ethClient.PendingNonceAt(ctx, user)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
+		actions := []txBuildAction{
+			{"borrow", fmt.Sprintf("Borrow %s from Aave V3 (variable rate)", symbol), "Aave V3 Pool"},
 		}
 
-		borrowData := EncodeBorrow(asset, amount, user)
-		borrowHex, borrowTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, borrowData, big.NewInt(0), chainID, nonce, 0)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build borrow tx: %v", err)), nil
-		}
-
-		dets := evmTxDetails(pool.Hex(), nonce, borrowTx.Gas(), borrowTx.GasPrice().String(), fmt.Sprintf("0x%x", borrowData), fmt.Sprintf("Borrow %s from Aave V3 (variable rate)", symbol))
-		dets["contract_name"] = "Aave V3 Pool"
-		addTokenFields(dets, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
-
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{Sequence: 1, Chain: types.EVMChainName(chainID), ChainID: chainID.String(), Action: "borrow", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(borrowHex), TxDetails: dets},
-			},
-		}
-		return result.ToToolResult()
+		return buildTxResult(ctx, evmSDK, user, chainID, txs, actions, []uint64{0}, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 	}
 }
 
-func handleRepay(store *vault.Store, ethClient *ethereum.Client, pc *ProtocolClient, chainID *big.Int) server.ToolHandlerFunc {
+func handleRepay(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		assetStr, err := req.RequireString("asset")
-		if err != nil {
-			return mcp.NewToolResultError("missing asset"), nil
-		}
-		amountStr, err := req.RequireString("amount")
-		if err != nil {
-			return mcp.NewToolResultError("missing amount"), nil
-		}
-		explicit := req.GetString("address", "")
-
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		asset := ethcommon.HexToAddress(assetStr)
 		user := ethcommon.HexToAddress(addr)
-		pool := pc.PoolAddress()
 
-		decimals, err := pc.GetTokenDecimals(ctx, asset)
+		txs, err := aavev3sdk.BuildRepayTx(ctx, aaveClient, asset, amountStr, user)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token decimals: %v", err)), nil
-		}
-		symbol, err := pc.GetTokenSymbol(ctx, asset)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get token symbol: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("build repay: %v", err)), nil
 		}
 
-		amount, err := ParseAmount(amountStr, int(decimals))
+		symbol, err := aaveClient.GetTokenSymbol(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token symbol: %v", err)), nil
+		}
+		decimals, err := aaveClient.GetTokenDecimals(ctx, asset)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get token decimals: %v", err)), nil
+		}
+
+		amount, err := aavev3sdk.ParseAmount(amountStr, int(decimals))
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %v", err)), nil
 		}
 
-		nonce, err := ethClient.PendingNonceAt(ctx, user)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
+		actions := []txBuildAction{
+			{"approve", fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol), fmt.Sprintf("%s Token", symbol)},
+			{"repay", fmt.Sprintf("Repay %s to Aave V3 (variable rate)", symbol), "Aave V3 Pool"},
 		}
+		gasOverrides := []uint64{0, gasLimitRepay}
 
-		chainName := types.EVMChainName(chainID)
-		chainIDStr := chainID.String()
-		assetChecksummed := asset.Hex()
-		poolChecksummed := pool.Hex()
-		decimalsStr := fmt.Sprintf("%d", decimals)
-
-		// Tx 1: approve
-		approveData := EncodeApprove(pool, amount)
-		approveHex, approveTx, err := ethClient.BuildUnsignedTx(ctx, user, asset, approveData, big.NewInt(0), chainID, nonce, 0)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build approve tx: %v", err)), nil
-		}
-		approveDets := evmTxDetails(assetChecksummed, nonce, approveTx.Gas(), approveTx.GasPrice().String(), fmt.Sprintf("0x%x", approveData), fmt.Sprintf("Approve %s spending for Aave V3 Pool", symbol))
-		approveDets["contract_name"] = fmt.Sprintf("%s Token", symbol)
-		addTokenFields(approveDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
-
-		// Tx 2: repay (depends on approve — fixed gas)
-		repayData := EncodeRepay(asset, amount, user)
-		repayHex, repayTx, err := ethClient.BuildUnsignedTx(ctx, user, pool, repayData, big.NewInt(0), chainID, nonce+1, gasLimitRepay)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to build repay tx: %v", err)), nil
-		}
-		repayDets := evmTxDetails(poolChecksummed, nonce+1, repayTx.Gas(), repayTx.GasPrice().String(), fmt.Sprintf("0x%x", repayData), fmt.Sprintf("Repay %s to Aave V3 (variable rate)", symbol))
-		repayDets["contract_name"] = "Aave V3 Pool"
-		addTokenFields(repayDets, symbol, assetChecksummed, amountStr, amount.String(), decimalsStr)
-
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{Sequence: 1, Chain: chainName, ChainID: chainIDStr, Action: "approve", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(approveHex), TxDetails: approveDets},
-				{Sequence: 2, Chain: chainName, ChainID: chainIDStr, Action: "repay", SigningMode: types.SigningModeECDSA, UnsignedTxHex: stripHexPrefix(repayHex), TxDetails: repayDets},
-			},
-		}
-		return result.ToToolResult()
+		return buildTxResult(ctx, evmSDK, user, chainID, txs, actions, gasOverrides, symbol, asset.Hex(), amountStr, amount.String(), fmt.Sprintf("%d", decimals))
 	}
 }
 
-func handleGetBalances(store *vault.Store, pc *ProtocolClient) server.ToolHandlerFunc {
+func handleGetBalances(store *vault.Store, aaveClient *aavev3sdk.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 
@@ -409,21 +292,18 @@ func handleGetBalances(store *vault.Store, pc *ProtocolClient) server.ToolHandle
 		}
 
 		user := ethcommon.HexToAddress(addr)
-		acct, err := pc.GetUserAccountData(ctx, user)
+		acct, err := aaveClient.GetUserAccountData(ctx, user)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get account data: %v", err)), nil
 		}
 
-		// Base currency values are 8-decimal USD.
 		collateral := ethereum.FormatUnits(acct.TotalCollateralBase, 8)
 		debt := ethereum.FormatUnits(acct.TotalDebtBase, 8)
 		available := ethereum.FormatUnits(acct.AvailableBorrowsBase, 8)
 
-		// Liquidation threshold and LTV are in bps (10000 = 100%).
 		liqThresholdPct := fmt.Sprintf("%.2f%%", float64(acct.CurrentLiquidationThreshold.Int64())/100.0)
 		ltvPct := fmt.Sprintf("%.2f%%", float64(acct.LTV.Int64())/100.0)
 
-		// Health factor is 18-decimal WAD.
 		healthFactor := ethereum.FormatUnits(acct.HealthFactor, 18)
 		if acct.TotalDebtBase.Sign() == 0 {
 			healthFactor = "∞ (no debt)"
@@ -447,7 +327,7 @@ Health Factor: %s`,
 	}
 }
 
-func handleGetRates(pc *ProtocolClient) server.ToolHandlerFunc {
+func handleGetRates(aaveClient *aavev3sdk.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		assetStr, err := req.RequireString("asset")
 		if err != nil {
@@ -456,23 +336,23 @@ func handleGetRates(pc *ProtocolClient) server.ToolHandlerFunc {
 
 		asset := ethcommon.HexToAddress(assetStr)
 
-		symbol, err := pc.GetTokenSymbol(ctx, asset)
+		symbol, err := aaveClient.GetTokenSymbol(ctx, asset)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get token symbol: %v", err)), nil
 		}
 
-		reserveData, err := pc.GetReserveData(ctx, asset)
+		reserveData, err := aaveClient.GetReserveData(ctx, asset)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get reserve data: %v", err)), nil
 		}
 
-		configData, err := pc.GetReserveConfigData(ctx, asset)
+		configData, err := aaveClient.GetReserveConfigData(ctx, asset)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get reserve config: %v", err)), nil
 		}
 
-		supplyAPY := RayToAPY(reserveData.LiquidityRate)
-		borrowAPY := RayToAPY(reserveData.VariableBorrowRate)
+		supplyAPY := aavev3sdk.RayToAPY(reserveData.LiquidityRate)
+		borrowAPY := aavev3sdk.RayToAPY(reserveData.VariableBorrowRate)
 
 		ltvPct := fmt.Sprintf("%.2f%%", float64(configData.LTV.Int64())/100.0)
 		liqThresholdPct := fmt.Sprintf("%.2f%%", float64(configData.LiquidationThreshold.Int64())/100.0)
@@ -504,4 +384,88 @@ Reserve Configuration:
 
 		return mcp.NewToolResultText(result), nil
 	}
+}
+
+func extractTxParams(ctx context.Context, req mcp.CallToolRequest, store *vault.Store) (asset, amount, addr string, err error) {
+	asset, err = req.RequireString("asset")
+	if err != nil {
+		return "", "", "", fmt.Errorf("missing asset")
+	}
+	amount, err = req.RequireString("amount")
+	if err != nil {
+		return "", "", "", fmt.Errorf("missing amount")
+	}
+
+	explicit := req.GetString("address", "")
+	addr, err = resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	return asset, amount, addr, nil
+}
+
+func decodeTxFields(unsignedTx evm.UnsignedTx) (nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, err error) {
+	txData, err := reth.DecodeUnsignedPayload(unsignedTx)
+	if err != nil {
+		return 0, 0, "", "", fmt.Errorf("decode unsigned tx: %w", err)
+	}
+	tx := ethtypes.NewTx(txData)
+	return tx.Nonce(), tx.Gas(), tx.GasFeeCap().String(), tx.GasTipCap().String(), nil
+}
+
+func buildTxResult(
+	ctx context.Context,
+	evmSDK *evm.SDK,
+	user ethcommon.Address,
+	chainID *big.Int,
+	txs []aavev3sdk.TxData,
+	actions []txBuildAction,
+	gasOverrides []uint64,
+	symbol, assetAddr, amountHuman, amountWei, decimals string,
+) (*mcp.CallToolResult, error) {
+	chainName := types.EVMChainName(chainID)
+	chainIDStr := chainID.String()
+
+	var resultTxs []types.Transaction
+	for i, tx := range txs {
+		gasOverride := uint64(0)
+		if i < len(gasOverrides) {
+			gasOverride = gasOverrides[i]
+		}
+
+		var unsignedTx evm.UnsignedTx
+		var buildErr error
+		if gasOverride > 0 {
+			unsignedTx, buildErr = evmSDK.MakeTxWithGasLimit(ctx, user, tx.To, tx.Value, tx.Data, uint64(i), gasOverride)
+		} else {
+			unsignedTx, buildErr = evmSDK.MakeTx(ctx, user, tx.To, tx.Value, tx.Data, uint64(i))
+		}
+		if buildErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to build tx %d: %v", i+1, buildErr)), nil
+		}
+
+		nonce, gasLimit, maxFee, maxPriorityFee, decodeErr := decodeTxFields(unsignedTx)
+		if decodeErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to decode tx %d: %v", i+1, decodeErr)), nil
+		}
+
+		action := actions[i]
+		dets := evmTxDetails(tx.To.Hex(), nonce, gasLimit, maxFee, maxPriorityFee, fmt.Sprintf("0x%x", tx.Data), action.description)
+		dets["contract_name"] = action.contractName
+		addTokenFields(dets, symbol, assetAddr, amountHuman, amountWei, decimals)
+
+		resultTxs = append(resultTxs, types.Transaction{
+			Sequence:      i + 1,
+			Chain:         chainName,
+			ChainID:       chainIDStr,
+			Action:        action.action,
+			SigningMode:   types.SigningModeECDSA,
+			UnsignedTxHex: hex.EncodeToString(unsignedTx),
+			TxDetails:     dets,
+		})
+	}
+
+	result := &types.TransactionResult{Transactions: resultTxs}
+	return result.ToToolResult()
 }

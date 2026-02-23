@@ -8,6 +8,9 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/vultisig/recipes/sdk/evm"
+	"github.com/vultisig/recipes/sdk/swap"
+
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	"github.com/vultisig/mcp/internal/config"
@@ -37,6 +40,8 @@ func main() {
 	}
 	logger.Printf("connected to chain %s (RPC: %s)", chainID.String(), cfg.ETHRPCURL)
 
+	evmSDK := evm.NewSDK(chainID, ethClient.ETH(), ethClient.RawRPC())
+
 	store := vault.NewStore()
 	cgClient := coingecko.NewClient(cfg.CoinGeckoAPIKey)
 	bcClient := blockchair.NewClient(cfg.BlockchairURL)
@@ -50,7 +55,8 @@ func main() {
 		server.WithRecovery(),
 	)
 
-	tools.RegisterAll(s, store, ethClient, chainID, cgClient, bcClient)
+	swapSvc := swap.NewService()
+	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc)
 
 	if *httpAddr != "" {
 		httpServer := server.NewStreamableHTTPServer(s)
