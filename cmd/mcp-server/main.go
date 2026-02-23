@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	"github.com/vultisig/mcp/internal/config"
 	"github.com/vultisig/mcp/internal/ethereum"
@@ -38,6 +39,7 @@ func main() {
 
 	store := vault.NewStore()
 	cgClient := coingecko.NewClient(cfg.CoinGeckoAPIKey)
+	bcClient := blockchair.NewClient(cfg.BlockchairURL)
 
 	hooks := mcplog.NewHooks(logger)
 
@@ -48,7 +50,7 @@ func main() {
 		server.WithRecovery(),
 	)
 
-	tools.RegisterAll(s, store, ethClient, chainID, cgClient)
+	tools.RegisterAll(s, store, ethClient, chainID, cgClient, bcClient)
 
 	if *httpAddr != "" {
 		httpServer := server.NewStreamableHTTPServer(s)

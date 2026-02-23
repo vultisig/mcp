@@ -22,6 +22,7 @@ go vet ./...                      # Lint
 |----------|---------|-------------|
 | `ETH_RPC_URL` | `https://ethereum-rpc.publicnode.com` | Ethereum JSON-RPC endpoint |
 | `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
+| `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
 
 ## Architecture
 
@@ -40,6 +41,11 @@ internal/tools/
   get_token_balance.go           # Query ERC-20 token balance
   find_token.go                  # Token discovery via CoinGecko API
 internal/coingecko/client.go     # CoinGecko REST API client
+internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
+internal/tools/
+  get_utxo_balance.go            # Query UTXO chain address balance
+  get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
+  list_utxos.go                  # List unspent transaction outputs
 ```
 
 ## Key Dependencies

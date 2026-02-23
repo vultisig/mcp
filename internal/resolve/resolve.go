@@ -38,3 +38,28 @@ func EVMAddress(explicit, sessionID string, store *vault.Store) (string, error) 
 	}
 	return addr, nil
 }
+
+// ChainAddress returns an explicit address if non-empty, otherwise derives
+// the address for the given chain from the vault's key material.
+// All UTXO chains use ECDSA.
+func ChainAddress(explicit, sessionID string, store *vault.Store, chainName string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+
+	v, ok := store.Get(sessionID)
+	if !ok {
+		return "", fmt.Errorf("no address provided and no vault info set for this session — call set_vault_info first")
+	}
+
+	chain, err := common.FromString(chainName)
+	if err != nil {
+		return "", fmt.Errorf("unsupported chain %q: %w", chainName, err)
+	}
+
+	addr, _, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, chain)
+	if err != nil {
+		return "", fmt.Errorf("derive %s address: %w", chainName, err)
+	}
+	return addr, nil
+}
