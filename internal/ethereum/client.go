@@ -7,16 +7,13 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/vultisig/recipes/sdk/evm/codegen/erc20"
 )
 
-// ABI function selectors.
-var (
-	selectorBalanceOf = ethcommon.Hex2Bytes("70a08231") // balanceOf(address)
-	selectorDecimals  = ethcommon.Hex2Bytes("313ce567") // decimals()
-	selectorSymbol    = ethcommon.Hex2Bytes("95d89b41") // symbol()
-)
+var erc20Codec = erc20.NewErc20()
 
 // TokenBalance holds the result of a token balance query.
 type TokenBalance struct {
@@ -27,7 +24,8 @@ type TokenBalance struct {
 
 // Client wraps an Ethereum JSON-RPC client.
 type Client struct {
-	eth *ethclient.Client
+	eth    *ethclient.Client
+	rawRPC *rpc.Client
 }
 
 func NewClient(rpcURL string) (*Client, error) {
@@ -35,11 +33,21 @@ func NewClient(rpcURL string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial ethereum rpc: %w", err)
 	}
-	return &Client{eth: eth}, nil
+	return &Client{eth: eth, rawRPC: eth.Client()}, nil
 }
 
 func (c *Client) Close() {
 	c.eth.Close()
+}
+
+// ETH returns the underlying ethclient for use by the EVM SDK.
+func (c *Client) ETH() *ethclient.Client {
+	return c.eth
+}
+
+// RawRPC returns the underlying rpc.Client for use by the EVM SDK.
+func (c *Client) RawRPC() *rpc.Client {
+	return c.rawRPC
 }
 
 // GetETHBalance returns the native ETH balance formatted in ETH units.
@@ -57,23 +65,21 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAddr, holderAddr stri
 	token := ethcommon.HexToAddress(tokenAddr)
 	holder := ethcommon.HexToAddress(holderAddr)
 
-	// Query decimals.
 	decimalsData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
 		To:   &token,
-		Data: selectorDecimals,
+		Data: erc20Codec.PackDecimals(),
 	}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("call decimals(): %w", err)
 	}
-	if len(decimalsData) < 32 {
-		return nil, fmt.Errorf("invalid decimals response: too short")
+	decimals, err := erc20Codec.UnpackDecimals(decimalsData)
+	if err != nil {
+		return nil, fmt.Errorf("decode decimals: %w", err)
 	}
-	decimals := uint8(new(big.Int).SetBytes(decimalsData).Uint64())
 
-	// Query symbol.
 	symbolData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
 		To:   &token,
-		Data: selectorSymbol,
+		Data: erc20Codec.PackSymbol(),
 	}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("call symbol(): %w", err)
@@ -83,22 +89,17 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAddr, holderAddr stri
 		return nil, fmt.Errorf("decode symbol: %w", err)
 	}
 
-	// Query balanceOf.
-	callData := make([]byte, 4+32)
-	copy(callData, selectorBalanceOf)
-	copy(callData[4+12:], holder.Bytes()) // left-pad address to 32 bytes
-
 	balanceData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
 		To:   &token,
-		Data: callData,
+		Data: erc20Codec.PackBalanceOf(holder),
 	}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("call balanceOf(): %w", err)
 	}
-	if len(balanceData) < 32 {
-		return nil, fmt.Errorf("invalid balanceOf response: too short")
+	balance, err := erc20Codec.UnpackBalanceOf(balanceData)
+	if err != nil {
+		return nil, fmt.Errorf("decode balanceOf: %w", err)
 	}
-	balance := new(big.Int).SetBytes(balanceData)
 
 	return &TokenBalance{
 		Balance:  FormatUnits(balance, int(decimals)),
@@ -116,71 +117,3 @@ func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
 func (c *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
 	return c.eth.CallContract(ctx, msg, block)
 }
-
-// PendingNonceAt returns the next nonce for the account at the pending state.
-func (c *Client) PendingNonceAt(ctx context.Context, account ethcommon.Address) (uint64, error) {
-	return c.eth.PendingNonceAt(ctx, account)
-}
-
-// SuggestGasPrice returns the currently suggested gas price.
-func (c *Client) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
-	return c.eth.SuggestGasPrice(ctx)
-}
-
-// EstimateGas estimates the gas needed to execute a transaction.
-func (c *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
-	return c.eth.EstimateGas(ctx, msg)
-}
-
-// BuildUnsignedTx constructs a fully populated unsigned transaction, estimating
-// gas and querying gas price from the chain. Returns the RLP-encoded hex string.
-//
-// If gasOverride is non-zero it is used directly as the gas limit (no
-// estimation). This is needed for multi-tx flows where a later transaction
-// depends on state created by an earlier one (e.g. supply after approve) —
-// eth_estimateGas would revert because the approve hasn't executed yet.
-func (c *Client) BuildUnsignedTx(ctx context.Context, from, to ethcommon.Address, data []byte, value *big.Int, chainID *big.Int, nonce uint64, gasOverride uint64) (string, *types.Transaction, error) {
-	gasPrice, err := c.SuggestGasPrice(ctx)
-	if err != nil {
-		return "", nil, fmt.Errorf("suggest gas price: %w", err)
-	}
-
-	gas := gasOverride
-	if gas == 0 {
-		gas, err = c.EstimateGas(ctx, ethereum.CallMsg{
-			From:     from,
-			To:       &to,
-			Data:     data,
-			Value:    value,
-			GasPrice: gasPrice,
-		})
-		if err != nil {
-			return "", nil, fmt.Errorf("estimate gas: %w", err)
-		}
-		// Apply 20% safety margin to estimated gas only.
-		gas = gas * 120 / 100
-	}
-
-	// Set V = chainID so the RLP encoding produces the EIP-155 unsigned
-	// payload: RLP([nonce, gasPrice, gas, to, value, data, chainID, 0, 0]).
-	// The signer hashes these bytes directly to get the signing hash.
-	tx := types.NewTx(&types.LegacyTx{
-		Nonce:    nonce,
-		GasPrice: gasPrice,
-		Gas:      gas,
-		To:       &to,
-		Value:    value,
-		Data:     data,
-		V:        new(big.Int).Set(chainID),
-		R:        new(big.Int),
-		S:        new(big.Int),
-	})
-
-	rawBytes, err := tx.MarshalBinary()
-	if err != nil {
-		return "", nil, fmt.Errorf("marshal tx: %w", err)
-	}
-
-	return "0x" + fmt.Sprintf("%x", rawBytes), tx, nil
-}
-
