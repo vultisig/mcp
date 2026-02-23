@@ -52,6 +52,7 @@ func main() {
 
 	s := server.NewMCPServer("vultisig-mcp", "0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithResourceCapabilities(false, true),
 		server.WithHooks(hooks),
 		server.WithToolHandlerMiddleware(mcplog.NewToolMiddleware(logger)),
 		server.WithRecovery(),
@@ -59,6 +60,7 @@ func main() {
 
 	swapSvc := swap.NewService()
 	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc)
+	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {
 		mcpHandler := server.NewStreamableHTTPServer(s)

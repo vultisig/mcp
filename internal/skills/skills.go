@@ -3,14 +3,18 @@ package skills
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,6 +71,36 @@ func init() {
 	}
 
 	cachedListing, _ = json.Marshal(skills)
+}
+
+// RegisterMCPResources registers each embedded skill file as an MCP resource
+// so that clients can discover them via resources/list and read them via
+// resources/read.
+func RegisterMCPResources(s *server.MCPServer) {
+	for name, content := range fileContents {
+		fm := parseFrontmatter(content)
+		uri := fmt.Sprintf("skill://vultisig/%s", name)
+		raw := make([]byte, len(content))
+		copy(raw, content)
+
+		s.AddResource(
+			mcp.NewResource(
+				uri,
+				fm.Name,
+				mcp.WithResourceDescription(fm.Description),
+				mcp.WithMIMEType("text/markdown"),
+			),
+			func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+				return []mcp.ResourceContents{
+					mcp.TextResourceContents{
+						URI:      req.Params.URI,
+						MIMEType: "text/markdown",
+						Text:     string(raw),
+					},
+				}, nil
+			},
+		)
+	}
 }
 
 // parseFrontmatter extracts YAML frontmatter delimited by "---" lines.
