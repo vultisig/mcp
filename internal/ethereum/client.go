@@ -117,3 +117,30 @@ func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
 func (c *Client) CallContract(ctx context.Context, msg ethereum.CallMsg, block *big.Int) ([]byte, error) {
 	return c.eth.CallContract(ctx, msg, block)
 }
+
+// PendingNonce returns the next nonce for the given address (pending state).
+func (c *Client) PendingNonce(ctx context.Context, addr ethcommon.Address) (uint64, error) {
+	return c.eth.PendingNonceAt(ctx, addr)
+}
+
+// SuggestGasTipCap returns the suggested gas tip cap (maxPriorityFeePerGas).
+func (c *Client) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
+	return c.eth.SuggestGasTipCap(ctx)
+}
+
+// LatestBaseFee returns the base fee from the latest block header.
+func (c *Client) LatestBaseFee(ctx context.Context) (*big.Int, error) {
+	header, err := c.eth.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get latest header: %w", err)
+	}
+	if header.BaseFee == nil {
+		return nil, fmt.Errorf("chain does not support EIP-1559 (no base fee)")
+	}
+	return header.BaseFee, nil
+}
+
+// EstimateGas estimates the gas needed for the given call message.
+func (c *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+	return c.eth.EstimateGas(ctx, msg)
+}
