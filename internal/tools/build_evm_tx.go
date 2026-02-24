@@ -8,8 +8,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	reth "github.com/vultisig/recipes/chain/evm/ethereum"
 
 	"github.com/vultisig/mcp/internal/types"
 )
@@ -128,21 +131,24 @@ func handleBuildEVMTx(serverChainID *big.Int) server.ToolHandlerFunc {
 			chainID = cid
 		}
 
-		tx := ethtypes.NewTx(&ethtypes.DynamicFeeTx{
-			ChainID:   chainID,
-			Nonce:     nonce.Uint64(),
-			GasTipCap: maxPriorityFee,
-			GasFeeCap: maxFee,
-			Gas:       gasLimit.Uint64(),
-			To:        &to,
-			Value:     value,
-			Data:      txData,
+		// Encode using the same DynamicFeeTxWithoutSignature struct the
+		// Vultisig recipes SDK uses, ensuring the signer can decode it
+		// via DecodeUnsignedPayload.
+		payload, err := rlp.EncodeToBytes(reth.DynamicFeeTxWithoutSignature{
+			ChainID:    chainID,
+			Nonce:      nonce.Uint64(),
+			GasTipCap:  maxPriorityFee,
+			GasFeeCap:  maxFee,
+			Gas:        gasLimit.Uint64(),
+			To:         &to,
+			Value:      value,
+			Data:       txData,
+			AccessList: ethtypes.AccessList{},
 		})
-
-		rawBytes, err := tx.MarshalBinary()
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("marshal tx failed: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("encode tx failed: %v", err)), nil
 		}
+		rawBytes := append([]byte{ethtypes.DynamicFeeTxType}, payload...)
 
 		result := &types.TransactionResult{
 			Transactions: []types.Transaction{

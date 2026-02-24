@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -16,6 +17,7 @@ import (
 	"github.com/vultisig/mcp/internal/config"
 	"github.com/vultisig/mcp/internal/ethereum"
 	mcplog "github.com/vultisig/mcp/internal/logging"
+	"github.com/vultisig/mcp/internal/skills"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -50,6 +52,7 @@ func main() {
 
 	s := server.NewMCPServer("vultisig-mcp", "0.1.0",
 		server.WithToolCapabilities(true),
+		server.WithResourceCapabilities(false, true),
 		server.WithHooks(hooks),
 		server.WithToolHandlerMiddleware(mcplog.NewToolMiddleware(logger)),
 		server.WithRecovery(),
@@ -57,11 +60,20 @@ func main() {
 
 	swapSvc := swap.NewService()
 	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc)
+	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {
-		httpServer := server.NewStreamableHTTPServer(s)
-		logger.Printf("listening on %s/mcp (HTTP mode)", *httpAddr)
-		if err := httpServer.Start(*httpAddr); err != nil {
+		mcpHandler := server.NewStreamableHTTPServer(s)
+
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", mcpHandler)
+		skillHandler := skills.NewHandler(logger)
+		mux.Handle("/skills", skillHandler)
+		mux.Handle("/skills/", skillHandler)
+
+		logger.Printf("listening on %s (HTTP mode)", *httpAddr)
+		srv := &http.Server{Addr: *httpAddr, Handler: mux}
+		if err := srv.ListenAndServe(); err != nil {
 			logger.Fatalf("http server error: %v", err)
 		}
 	} else {
