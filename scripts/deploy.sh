@@ -25,10 +25,6 @@ export PATH=\$PATH:/usr/local/go/bin
 
 cd $DEPLOY_PATH
 
-echo "Removing local replace directives..."
-go mod edit -dropreplace github.com/vultisig/recipes
-go mod tidy
-
 echo "Building mcp-server binary..."
 go build -o mcp-server ./cmd/mcp-server/
 

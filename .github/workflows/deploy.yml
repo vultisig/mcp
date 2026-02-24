@@ -15,11 +15,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Remove local replace directives
-        run: |
-          go mod edit -dropreplace github.com/vultisig/recipes
-          go mod tidy
-
       - name: Vet
         run: go vet ./...
 

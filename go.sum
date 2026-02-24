@@ -672,6 +672,8 @@ github.com/vultisig/commondata v0.0.0-20250710214228-61d9ed8f7778 h1:XJ1hoo37JKG
 github.com/vultisig/commondata v0.0.0-20250710214228-61d9ed8f7778/go.mod h1:UMc5q0Myab+BvzAe67UQrXTXwKGYNxK7bky7DJM+dl8=
 github.com/vultisig/mobile-tss-lib v0.0.0-20250316003201-2e7e570a4a74 h1:goqwk4nQ/NEVIb3OPP9SUx7/u9ZfsUIcd5fIN/e4DVU=
 github.com/vultisig/mobile-tss-lib v0.0.0-20250316003201-2e7e570a4a74/go.mod h1:nOykk4nOy1L3yXtLSlYvVsgizBnCQ3tR2N5uwGPdvaM=
+github.com/vultisig/recipes v0.0.0-20260224014344-cb8b6790d744 h1:SlwoBKCuCKJ9E5vGujW7Zpxs0sAo3VlIAFKyQvaMuHg=
+github.com/vultisig/recipes v0.0.0-20260224014344-cb8b6790d744/go.mod h1:PUz2BoPkuCrk9EFeWavynFSIMM2DNULfFeSS0CGVIVc=
 github.com/vultisig/vultisig-go v0.0.0-20260124100803-5ee9e9f8e9d5 h1:6q3ARooyc+m9fZCBSHyPAZCZV/OQHuw2fLdknuXxwus=
 github.com/vultisig/vultisig-go v0.0.0-20260124100803-5ee9e9f8e9d5/go.mod h1:jOf+2n1Eo/XZjiUbHjTfraPMw4HAZZ0Sw9Z6+vpQrU4=
 github.com/wk8/go-ordered-map/v2 v2.1.8 h1:5h/BUHu93oj4gIdvHHHGsScSTMijfx5PeYkE/fJgbpc=
