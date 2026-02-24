@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -12,6 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	reth "github.com/vultisig/recipes/chain/evm/ethereum"
 
 	"github.com/vultisig/mcp/internal/types"
 )
@@ -130,27 +131,24 @@ func handleBuildEVMTx(serverChainID *big.Int) server.ToolHandlerFunc {
 			chainID = cid
 		}
 
-		// RLP-encode the unsigned EIP-1559 payload (9 elements, no V/R/S).
-		// MarshalBinary() would include zero V, R, S fields which produces
-		// a 12-element list that signers reject.
-		unsignedFields := []any{
-			chainID,
-			nonce.Uint64(),
-			maxPriorityFee,
-			maxFee,
-			gasLimit.Uint64(),
-			&to,
-			value,
-			txData,
-			ethtypes.AccessList{}, // empty access list
-		}
-
-		var buf bytes.Buffer
-		buf.WriteByte(0x02) // EIP-1559 type prefix
-		if err := rlp.Encode(&buf, unsignedFields); err != nil {
+		// Encode using the same DynamicFeeTxWithoutSignature struct the
+		// Vultisig recipes SDK uses, ensuring the signer can decode it
+		// via DecodeUnsignedPayload.
+		payload, err := rlp.EncodeToBytes(reth.DynamicFeeTxWithoutSignature{
+			ChainID:    chainID,
+			Nonce:      nonce.Uint64(),
+			GasTipCap:  maxPriorityFee,
+			GasFeeCap:  maxFee,
+			Gas:        gasLimit.Uint64(),
+			To:         &to,
+			Value:      value,
+			Data:       txData,
+			AccessList: ethtypes.AccessList{},
+		})
+		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("encode tx failed: %v", err)), nil
 		}
-		rawBytes := buf.Bytes()
+		rawBytes := append([]byte{ethtypes.DynamicFeeTxType}, payload...)
 
 		result := &types.TransactionResult{
 			Transactions: []types.Transaction{
