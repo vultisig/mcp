@@ -58,3 +58,34 @@ func TestCacheHit(t *testing.T) {
 		t.Error("expected cache hit to return same pointer")
 	}
 }
+
+func TestGetRawTransaction(t *testing.T) {
+	skipUnlessIntegration(t)
+
+	c := NewClient("https://api.vultisig.com/blockchair")
+
+	txHash := "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16"
+	rawBytes, err := c.GetRawTransaction(context.Background(), "Bitcoin", txHash)
+	if err != nil {
+		t.Fatalf("GetRawTransaction: %v", err)
+	}
+	if len(rawBytes) == 0 {
+		t.Error("expected non-empty raw transaction bytes")
+	}
+}
+
+func TestChainFetcher(t *testing.T) {
+	skipUnlessIntegration(t)
+
+	c := NewClient("https://api.vultisig.com/blockchair")
+	fetcher := c.ChainFetcherWithCtx(context.Background(), "Bitcoin")
+
+	txHash := "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16"
+	rawBytes, err := fetcher.GetRawTransaction(txHash)
+	if err != nil {
+		t.Fatalf("ChainFetcher.GetRawTransaction: %v", err)
+	}
+	if len(rawBytes) == 0 {
+		t.Error("expected non-empty raw transaction bytes")
+	}
+}
