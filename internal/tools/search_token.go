@@ -49,8 +49,8 @@ var platformToChain = map[string]string{
 	"zcash":               "Zcash",
 }
 
-func newFindTokenTool() mcp.Tool {
-	return mcp.NewTool("find_token",
+func newSearchTokenTool() mcp.Tool {
+	return mcp.NewTool("search_token",
 		mcp.WithDescription(
 			"Search for tokens by ticker symbol, name, or contract address. "+
 				"Returns token metadata and all known contract deployments across chains, "+
@@ -64,7 +64,7 @@ func newFindTokenTool() mcp.Tool {
 	)
 }
 
-func handleFindToken(cgClient *coingecko.Client) server.ToolHandlerFunc {
+func handleSearchToken(cgClient *coingecko.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		query, err := req.RequireString("query")
 		if err != nil {

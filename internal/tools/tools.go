@@ -20,7 +20,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, ethClient *ethereum.Cl
 	s.AddTool(newGetAddressTool(), handleGetAddress(store))
 	s.AddTool(newGetETHBalanceTool(), handleGetETHBalance(store, ethClient))
 	s.AddTool(newGetTokenBalanceTool(), handleGetTokenBalance(store, ethClient))
-	s.AddTool(newFindTokenTool(), handleFindToken(cgClient))
+	s.AddTool(newSearchTokenTool(), handleSearchToken(cgClient))
 	s.AddTool(newGetUTXOBalanceTool(), handleGetUTXOBalance(store, bcClient))
 	s.AddTool(newGetUTXOTransactionsTool(), handleGetUTXOTransactions(store, bcClient))
 	s.AddTool(newListUTXOsTool(), handleListUTXOs(store, bcClient))

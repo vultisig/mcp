@@ -39,7 +39,7 @@ internal/tools/
   get_address.go                 # Derive address for any supported chain
   get_eth_balance.go             # Query native ETH balance
   get_token_balance.go           # Query ERC-20 token balance
-  find_token.go                  # Token discovery via CoinGecko API
+  search_token.go                # Token discovery via CoinGecko API
 internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
 internal/tools/

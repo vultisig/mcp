@@ -311,4 +311,4 @@ To redeem all shares, first query `balanceOf(address)` to get the exact share co
 - **DO NOT** call admin functions: `setDepositCap`, `setVsr`, `setVsrBounds`, `grantRole`, `revokeRole`, `take`, `drip`, `upgradeToAndCall`. These require privileged roles the user does not have.
 - **DO NOT** mix up decimals. Use the Decimals column in the address tables above. When in doubt, query `decimals()` on the vault.
 - **DO NOT** deposit more than `maxDeposit(address)` returns for the receiver. The vault may have a deposit cap.
-- **DO NOT** use `find_token` to look up Spark vault tokens (spUSDT, spUSDC, etc.). They are not listed on CoinGecko. Use the addresses in this skill directly.
+- **DO NOT** use `search_token` to look up Spark vault tokens (spUSDT, spUSDC, etc.). They are not listed on CoinGecko. Use the addresses in this skill directly.
