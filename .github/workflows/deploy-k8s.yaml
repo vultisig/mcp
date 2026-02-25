@@ -1,0 +1,90 @@
+name: Build and Push Images
+
+on:
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NS: mcp
+
+jobs:
+  build-server:
+    uses: ./.github/workflows/build-push-image.yaml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      service: mcp-server
+      registry: ghcr.io
+      image_name: ${{ github.repository }}
+      tag: ${{ github.event.release.tag_name }}
+      additional_tag: latest
+
+  set-public:
+    needs: [build-server]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Set GHCR packages public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner="${{ github.repository_owner }}"
+          repo="${{ github.event.repository.name }}"
+          gh api -X PATCH "/orgs/${owner}/packages/container/${repo}%2Fmcp-server/visibility" -f visibility=public || true
+
+  update-manifests:
+    needs: [build-server, set-public]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update deployment files with new image tags
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/mcp-server:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/mcp-server:${TAG}|" deploy/01_server.yaml
+
+      - name: Commit and push updated manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deploy/
+          git commit -m "chore: update image tags to ${{ github.event.release.tag_name }}" || echo "No changes to commit"
+          git push origin main
+
+  deploy:
+    needs: [update-manifests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Update deployment files
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          sed -i "s|image: ghcr.io/${{ env.IMAGE_NAME }}/mcp-server:.*|image: ghcr.io/${{ env.IMAGE_NAME }}/mcp-server:${TAG}|" deploy/01_server.yaml
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl -n ${{ env.NS }} apply -f deploy/prod
+          kubectl -n ${{ env.NS }} apply -f deploy/01_server.yaml
+          kubectl -n ${{ env.NS }} rollout status deployment/server --timeout=300s

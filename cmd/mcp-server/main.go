@@ -66,6 +66,9 @@ func main() {
 		mcpHandler := server.NewStreamableHTTPServer(s)
 
 		mux := http.NewServeMux()
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
 		mux.Handle("/mcp", mcpHandler)
 		skillHandler := skills.NewHandler(logger)
 		mux.Handle("/skills", skillHandler)
