@@ -620,6 +620,75 @@ func TestBuildBTCSend_SwapWorkflow(t *testing.T) {
 		swapAmount, vaultAddr, fee, len(pkt.UnsignedTx.TxIn), len(pkt.UnsignedTx.TxOut))
 }
 
+func TestBuildBTCSend_KeysignHashes(t *testing.T) {
+	store := setupBTCVault(t)
+	senderAddr, _ := deriveTestBTCAddress(t)
+
+	prevTxHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	prevTxHex := buildPrevTx(t, senderAddr, 500000)
+
+	utxos := []blockchair.UTXO{{TransactionHash: prevTxHash, Index: 0, Value: 500000, BlockID: 800000}}
+	rawTxs := map[string]string{prevTxHash: prevTxHex}
+
+	srv := mockBlockchairServer(t, utxos, rawTxs)
+	defer srv.Close()
+
+	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+
+	req := callToolReq("build_btc_send", map[string]any{
+		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+		"amount":     "200000",
+		"fee_rate":   float64(10),
+	})
+
+	res, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := resultText(t, res)
+
+	var txResult struct {
+		Transactions []struct {
+			UnsignedTxHex string `json:"unsigned_tx_hex"`
+		} `json:"transactions"`
+	}
+	err = json.Unmarshal([]byte(text), &txResult)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	psbtBytes, err := hex.DecodeString(txResult.Transactions[0].UnsignedTxHex)
+	if err != nil {
+		t.Fatalf("decode hex: %v", err)
+	}
+	pkt, err := psbt.NewFromRawBytes(bytes.NewReader(psbtBytes), false)
+	if err != nil {
+		t.Fatalf("parse PSBT: %v", err)
+	}
+
+	sdk := btcsdk.NewSDK(nil)
+	for i := range pkt.Inputs {
+		hashToSign, hashErr := sdk.CalculateInputSignatureHash(pkt, i)
+		if hashErr != nil {
+			t.Fatalf("input %d: CalculateInputSignatureHash: %v", i, hashErr)
+		}
+		if len(hashToSign) != 32 {
+			t.Errorf("input %d: expected 32-byte hash, got %d bytes", i, len(hashToSign))
+		}
+		allZero := true
+		for _, b := range hashToSign {
+			if b != 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			t.Errorf("input %d: hash is all zeros", i)
+		}
+		t.Logf("input %d: sigHash=%x", i, hashToSign)
+	}
+}
+
 func TestBuildBTCSend_MemoTooLong(t *testing.T) {
 	store := setupBTCVault(t)
 
