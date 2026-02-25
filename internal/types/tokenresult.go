@@ -7,7 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// TokenSearchResult is the top-level JSON envelope returned by find_token.
+// TokenSearchResult is the top-level JSON envelope returned by search_token.
 type TokenSearchResult struct {
 	Tokens []TokenInfo `json:"tokens"`
 }

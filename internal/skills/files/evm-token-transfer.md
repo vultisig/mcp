@@ -21,7 +21,7 @@ Build an unsigned ERC-20 token transfer transaction, ready for signing.
 If you only have a token name or symbol, look it up:
 
 ```
-find_token(query: "USDC")
+search_token(query: "USDC")
 ```
 
 Note the `contract_address` and `decimals` from the result.
