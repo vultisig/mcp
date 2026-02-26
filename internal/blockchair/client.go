@@ -2,6 +2,7 @@ package blockchair
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -77,15 +78,17 @@ type Client struct {
 	http    *http.Client
 	baseURL string
 
-	cache *ttlCache[*AddressDashboard]
+	cache      *ttlCache[*AddressDashboard]
+	rawTxCache *ttlCache[[]byte]
 }
 
 // NewClient creates a Blockchair API client.
 func NewClient(baseURL string) *Client {
 	return &Client{
-		http:    &http.Client{Timeout: 30 * time.Second},
-		baseURL: baseURL,
-		cache:   newTTLCache[*AddressDashboard](dashboardCacheTTL),
+		http:       &http.Client{Timeout: 30 * time.Second},
+		baseURL:    baseURL,
+		cache:      newTTLCache[*AddressDashboard](dashboardCacheTTL),
+		rawTxCache: newTTLCache[[]byte](dashboardCacheTTL),
 	}
 }
 
@@ -130,4 +133,76 @@ func (c *Client) GetAddressDashboard(ctx context.Context, chain, address string)
 
 	c.cache.set(cacheKey, &dashboard)
 	return &dashboard, nil
+}
+
+// GetRawTransaction fetches raw transaction bytes for a given tx hash.
+// Follows the pattern from app-recurring/internal/blockchair/client.go.
+func (c *Client) GetRawTransaction(ctx context.Context, chain, txHash string) ([]byte, error) {
+	info, ok := SupportedChains[chain]
+	if !ok {
+		return nil, fmt.Errorf("unsupported UTXO chain: %s", chain)
+	}
+
+	cacheKey := chain + ":" + txHash
+	if cached, ok := c.rawTxCache.get(cacheKey); ok {
+		return cached, nil
+	}
+
+	url := fmt.Sprintf("%s/%s/raw/transaction/%s", c.baseURL, info.Slug, txHash)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("blockchair: raw tx %s returned %d", txHash, resp.StatusCode)
+	}
+
+	var rr rawTxResponse
+	err = json.NewDecoder(resp.Body).Decode(&rr)
+	if err != nil {
+		return nil, fmt.Errorf("blockchair: decode raw tx: %w", err)
+	}
+
+	item, ok := rr.Data[txHash]
+	if !ok {
+		return nil, fmt.Errorf("blockchair: no data for tx %s", txHash)
+	}
+
+	raw, err := hex.DecodeString(item.RawTransaction)
+	if err != nil {
+		return nil, fmt.Errorf("blockchair: decode raw tx hex: %w", err)
+	}
+
+	c.rawTxCache.set(cacheKey, raw)
+	return raw, nil
+}
+
+// ChainFetcherWithCtx returns a PrevTxFetcher adapter for the given chain,
+// implementing the btc.PrevTxFetcher interface used by PopulatePSBTMetadata.
+// Captures the request context so cancellation propagates to raw tx fetches.
+func (c *Client) ChainFetcherWithCtx(ctx context.Context, chain string) *chainFetcherAdapter {
+	return &chainFetcherAdapter{client: c, chain: chain, ctx: ctx}
+}
+
+type chainFetcherAdapter struct {
+	client *Client
+	chain  string
+	ctx    context.Context
+}
+
+func (a *chainFetcherAdapter) GetRawTransaction(txHash string) ([]byte, error) {
+	return a.client.GetRawTransaction(a.ctx, a.chain, txHash)
+}
+
+type rawTxResponse struct {
+	Data map[string]struct {
+		RawTransaction string `json:"raw_transaction"`
+	} `json:"data"`
 }

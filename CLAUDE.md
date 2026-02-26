@@ -23,6 +23,7 @@ go vet ./...                      # Lint
 | `ETH_RPC_URL` | `https://ethereum-rpc.publicnode.com` | Ethereum JSON-RPC endpoint |
 | `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
+| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
 
 ## Architecture
 
@@ -42,17 +43,22 @@ internal/tools/
   search_token.go                # Token discovery via CoinGecko API
 internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
+internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
 internal/tools/
   get_utxo_balance.go            # Query UTXO chain address balance
   get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
   list_utxos.go                  # List unspent transaction outputs
+  btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
+  build_btc_send.go              # Build unsigned BTC PSBT for send or swap
 ```
 
 ## Key Dependencies
 
 - `github.com/mark3labs/mcp-go` — MCP server framework (stdio, tool registration)
 - `github.com/vultisig/vultisig-go` — Address derivation from vault keys
+- `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), and swap operations
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
+- `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
 
 ## Logging
 

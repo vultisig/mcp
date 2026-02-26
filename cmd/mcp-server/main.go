@@ -9,6 +9,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	btcsdk "github.com/vultisig/recipes/sdk/btc"
 	"github.com/vultisig/recipes/sdk/evm"
 	"github.com/vultisig/recipes/sdk/swap"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/vultisig/mcp/internal/ethereum"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/skills"
+	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -59,7 +61,9 @@ func main() {
 	)
 
 	swapSvc := swap.NewService()
-	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc)
+	utxoBuilder := btcsdk.Mainnet()
+	tcClient := thorchain.NewClient(cfg.ThorchainURL)
+	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc, utxoBuilder, tcClient)
 	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {
