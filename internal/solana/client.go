@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	bin "github.com/gagliardetto/binary"
@@ -99,8 +100,7 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAccount solana.Public
 		return 0, nil
 	}
 
-	var amount uint64
-	_, err = fmt.Sscanf(balance.Value.Amount, "%d", &amount)
+	amount, err := strconv.ParseUint(balance.Value.Amount, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("parse token amount: %w", err)
 	}
@@ -256,6 +256,6 @@ func buildCreateATAInstruction(payer, owner, mint, ataAddress, tokenProgram sola
 			{PublicKey: solana.SystemProgramID, IsSigner: false, IsWritable: false},
 			{PublicKey: tokenProgram, IsSigner: false, IsWritable: false},
 		},
-		[]byte{0},
+		[]byte{1}, // createIdempotent: no-op if ATA already exists
 	)
 }

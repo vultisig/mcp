@@ -38,10 +38,6 @@ func newBuildSPLTransferTxTool() mcp.Tool {
 			mcp.Description("Amount in base units (decimal string)."),
 			mcp.Required(),
 		),
-		mcp.WithNumber("decimals",
-			mcp.Description("Token decimals (required for transfer_checked instruction)."),
-			mcp.Required(),
-		),
 	)
 }
 
@@ -72,12 +68,6 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %s", amountStr)), nil
 		}
 
-		decimalsVal := req.GetFloat("decimals", -1)
-		if decimalsVal < 0 || decimalsVal > 255 || decimalsVal != float64(uint8(decimalsVal)) {
-			return mcp.NewToolResultError("missing or invalid decimals parameter"), nil
-		}
-		decimals := uint8(decimalsVal)
-
 		fromPubkey, err := solanaclient.ParsePublicKey(fromAddr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
@@ -93,7 +83,7 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 			return mcp.NewToolResultError(fmt.Sprintf("invalid mint address: %v", err)), nil
 		}
 
-		tokenProgram, _, err := solClient.GetTokenProgram(ctx, mintPubkey)
+		tokenProgram, decimals, err := solClient.GetTokenProgram(ctx, mintPubkey)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to detect token program: %v", err)), nil
 		}

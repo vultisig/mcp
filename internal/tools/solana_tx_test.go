@@ -113,40 +113,6 @@ func TestBuildSolanaTx_MissingParams(t *testing.T) {
 	}
 }
 
-func TestBuildSPLTransferTx_InvalidDecimals(t *testing.T) {
-	store := vault.NewStore()
-	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient("https://localhost:0"))
-	ctx := context.Background()
-
-	tests := []struct {
-		name     string
-		decimals any
-	}{
-		{"fractional", 6.5},
-		{"negative", -1.0},
-		{"too_large", 256.0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := callToolReq("build_spl_transfer_tx", map[string]any{
-				"from":     "11111111111111111111111111111111",
-				"to":       "11111111111111111111111111111111",
-				"mint":     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-				"amount":   "1000000",
-				"decimals": tt.decimals,
-			})
-			res, err := handler(ctx, req)
-			if err != nil {
-				t.Fatalf("unexpected Go error: %v", err)
-			}
-			if !res.IsError {
-				t.Fatal("expected tool error for invalid decimals")
-			}
-		})
-	}
-}
-
 func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 	store := vault.NewStore()
 	store.Set("default", vault.Info{
