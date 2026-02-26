@@ -12,6 +12,7 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/programs/system"
+	"github.com/mark3labs/mcp-go/mcp"
 
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/types"
@@ -150,15 +151,15 @@ func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 		return
 	}
 
-	// Verify the error is from RPC, not from address derivation
-	tc, ok := res.Content[0].(interface{ MarshalJSON() ([]byte, error) })
-	if !ok {
-		return
+	if len(res.Content) == 0 {
+		t.Fatal("expected error content, got empty")
 	}
-	data, _ := json.Marshal(tc)
-	errStr := string(data)
-	if strings.Contains(errStr, "vault info") || strings.Contains(errStr, "derive") {
-		t.Fatalf("expected RPC error, got address error: %s", errStr)
+	tc, ok := res.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", res.Content[0])
+	}
+	if strings.Contains(tc.Text, "vault info") || strings.Contains(tc.Text, "derive") {
+		t.Fatalf("expected RPC error, got address error: %s", tc.Text)
 	}
 }
 
@@ -329,6 +330,34 @@ func verifySolanaSDKCompat(t *testing.T, txBytes []byte, wantInstructions int) {
 	}
 	if !bytes.Equal(decoded, txBytes) {
 		t.Error("hex round-trip mismatch")
+	}
+}
+
+func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
+	store := vault.NewStore()
+	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient("https://localhost:0"))
+	ctx := context.Background()
+
+	req := callToolReq("build_spl_transfer_tx", map[string]any{
+		"from":   "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA",
+		"to":     "11111111111111111111111111111111",
+		"mint":   "So11111111111111111111111111111111111111112",
+		"amount": "1000000",
+	})
+
+	res, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected tool error for native SOL mint")
+	}
+	tc, ok := res.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", res.Content[0])
+	}
+	if !strings.Contains(tc.Text, "build_solana_tx") {
+		t.Errorf("error should mention build_solana_tx, got: %s", tc.Text)
 	}
 }
 

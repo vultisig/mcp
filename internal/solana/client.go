@@ -59,7 +59,14 @@ func (c *Client) GetNativeBalance(ctx context.Context, account solana.PublicKey)
 	return result.Value, nil
 }
 
+// GetTokenProgram queries the mint account to determine which token program owns it.
+// Returns zero pubkey and nil error for native SOL mint (So1111...1112) since
+// native SOL transfers don't use a token program.
 func (c *Client) GetTokenProgram(ctx context.Context, mint solana.PublicKey) (solana.PublicKey, uint8, error) {
+	if mint == solana.SolMint {
+		return solana.PublicKey{}, 0, nil
+	}
+
 	accountInfo, err := c.rpc.GetAccountInfo(ctx, mint)
 	if err != nil {
 		return solana.PublicKey{}, 0, fmt.Errorf("get mint account info: %w", err)

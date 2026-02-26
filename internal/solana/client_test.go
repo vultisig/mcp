@@ -1,6 +1,7 @@
 package solana
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -50,6 +51,22 @@ func TestParsePublicKey(t *testing.T) {
 			t.Fatal("expected error for invalid key")
 		}
 	})
+}
+
+func TestGetTokenProgram_NativeMint(t *testing.T) {
+	client := NewClient("https://localhost:0")
+	ctx := context.Background()
+
+	pubkey, decimals, err := client.GetTokenProgram(ctx, solana.SolMint)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pubkey != (solana.PublicKey{}) {
+		t.Errorf("expected zero pubkey, got %s", pubkey)
+	}
+	if decimals != 0 {
+		t.Errorf("expected 0 decimals, got %d", decimals)
+	}
 }
 
 func TestFindAssociatedTokenAddress(t *testing.T) {

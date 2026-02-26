@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/gagliardetto/solana-go"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -21,6 +22,7 @@ func newBuildSPLTransferTxTool() mcp.Tool {
 			"Build an unsigned SPL token transfer transaction. "+
 				"Auto-detects token program (SPL vs Token-2022) and derives associated token accounts. "+
 				"If the destination ATA does not exist, includes a create-ATA instruction in the transaction. "+
+				"For native SOL transfers (including wSOL mint So1111...1112), use build_solana_tx instead. "+
 				"Returns a TransactionResult with signing_mode=eddsa_ed25519.",
 		),
 		mcp.WithString("from",
@@ -86,6 +88,9 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 		tokenProgram, decimals, err := solClient.GetTokenProgram(ctx, mintPubkey)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to detect token program: %v", err)), nil
+		}
+		if tokenProgram == (solana.PublicKey{}) {
+			return mcp.NewToolResultError("native SOL transfers (including wSOL) should use build_solana_tx instead"), nil
 		}
 
 		txBytes, err := solClient.BuildTokenTransfer(ctx, mintPubkey, fromPubkey, toPubkey, amount.Uint64(), decimals, tokenProgram)
