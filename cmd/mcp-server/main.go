@@ -17,6 +17,7 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/skills"
+	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
@@ -50,10 +51,13 @@ func main() {
 		server.WithRecovery(),
 	)
 
+	solClient := solanaclient.NewClient(cfg.SolanaRPCURL)
+	logger.Printf("solana RPC: %s", cfg.SolanaRPCURL)
+
 	swapSvc := swap.NewService()
 	utxoBuilder := btcsdk.Mainnet()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient, solClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)

@@ -35,6 +35,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
 | `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
+| `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 
 ## Architecture
 
@@ -68,12 +69,17 @@ internal/tools/
 internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
+internal/solana/client.go        # Solana RPC client wrapper
 internal/tools/
   get_utxo_balance.go            # Query UTXO chain address balance
   get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
   list_utxos.go                  # List unspent transaction outputs
   btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
-  build_btc_send.go    
+  build_btc_send.go              # Build unsigned BTC PSBT for send or swap
+  get_sol_balance.go             # Query native SOL balance
+  get_spl_token_balance.go       # Query SPL token balance
+  build_solana_tx.go             # Build unsigned native SOL transfer
+  build_spl_transfer_tx.go       # Build unsigned SPL token transfer
 ```
 
 ## Key Dependencies
@@ -84,6 +90,7 @@ internal/tools/
 - `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), and swap operations
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
 - `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
+- `github.com/gagliardetto/solana-go` — Solana RPC client and transaction building
 
 ## EVM Chains
 

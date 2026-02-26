@@ -12,11 +12,12 @@ import (
 	"github.com/vultisig/mcp/internal/coingecko"
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/protocols"
+	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client, solClient *solanaclient.Client) error {
 	s.AddTool(newSetVaultInfoTool(), handleSetVaultInfo(store))
 	s.AddTool(newGetAddressTool(), handleGetAddress(store))
 	s.AddTool(newEVMGetBalanceTool(), handleEVMGetBalance(store, pool))
@@ -36,6 +37,10 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newBuildUTXOTxTool(), handleBuildUTXOTx())
 	s.AddTool(newBTCFeeRateTool(), handleBTCFeeRate(tcClient))
 	s.AddTool(newBuildBTCSendTool(), handleBuildBTCSend(store, utxoBuilder, bcClient))
+	s.AddTool(newGetSOLBalanceTool(), handleGetSOLBalance(store, solClient))
+	s.AddTool(newGetSPLTokenBalanceTool(), handleGetSPLTokenBalance(store, solClient))
+	s.AddTool(newBuildSolanaTxTool(), handleBuildSolanaTx(store, solClient))
+	s.AddTool(newBuildSPLTransferTxTool(), handleBuildSPLTransferTx(store, solClient))
 
 	err := protocols.RegisterAll(s, store, pool)
 	if err != nil {
