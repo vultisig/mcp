@@ -14,16 +14,20 @@ import (
 
 	reth "github.com/vultisig/recipes/chain/evm/ethereum"
 
+	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/types"
 )
 
 func newBuildEVMTxTool() mcp.Tool {
 	return mcp.NewTool("build_evm_tx",
 		mcp.WithDescription(
-			"Build an unsigned EIP-1559 (type 2) EVM transaction. "+
-				"All parameters are explicit — the agent provides nonce, gas, and fee values "+
-				"(typically obtained from evm_tx_info). "+
+			"Build an unsigned EIP-1559 (type 2) EVM transaction for any EVM chain. "+
+				"All fee/nonce parameters are explicit — obtain them from evm_tx_info first. "+
 				"Returns the RLP-encoded unsigned transaction ready for signing.",
+		),
+		mcp.WithString("chain",
+			mcp.Description("EVM chain name. One of: "+chainEnumDesc()+". Determines chain_id when not explicitly set."),
+			mcp.DefaultString("Ethereum"),
 		),
 		mcp.WithString("to",
 			mcp.Description("Destination address (0x-prefixed)."),
@@ -53,13 +57,27 @@ func newBuildEVMTxTool() mcp.Tool {
 			mcp.Required(),
 		),
 		mcp.WithString("chain_id",
-			mcp.Description("Chain ID (decimal string). Defaults to the server's connected chain."),
+			mcp.Description("Chain ID override (decimal string). Defaults to the chain's known ID."),
 		),
 	)
 }
 
-func handleBuildEVMTx(serverChainID *big.Int) server.ToolHandlerFunc {
+func handleBuildEVMTx() server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		chainName := req.GetString("chain", "Ethereum")
+
+		chainID, ok := evmclient.ChainIDByName(chainName)
+		if !ok {
+			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain: %s", chainName)), nil
+		}
+		if cidStr := req.GetString("chain_id", ""); cidStr != "" {
+			cid, ok := new(big.Int).SetString(cidStr, 10)
+			if !ok {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid chain_id: %s", cidStr)), nil
+			}
+			chainID = cid
+		}
+
 		toStr, err := req.RequireString("to")
 		if err != nil {
 			return mcp.NewToolResultError("missing to parameter"), nil
@@ -122,18 +140,6 @@ func handleBuildEVMTx(serverChainID *big.Int) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid max_priority_fee_per_gas: %s", maxPriorityFeeStr)), nil
 		}
 
-		chainID := new(big.Int).Set(serverChainID)
-		if cidStr := req.GetString("chain_id", ""); cidStr != "" {
-			cid, ok := new(big.Int).SetString(cidStr, 10)
-			if !ok {
-				return mcp.NewToolResultError(fmt.Sprintf("invalid chain_id: %s", cidStr)), nil
-			}
-			chainID = cid
-		}
-
-		// Encode using the same DynamicFeeTxWithoutSignature struct the
-		// Vultisig recipes SDK uses, ensuring the signer can decode it
-		// via DecodeUnsignedPayload.
 		payload, err := rlp.EncodeToBytes(reth.DynamicFeeTxWithoutSignature{
 			ChainID:    chainID,
 			Nonce:      nonce.Uint64(),

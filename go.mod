@@ -10,6 +10,7 @@ require (
 	github.com/ethereum/go-ethereum v1.17.0
 	github.com/gcash/bchd v0.21.1
 	github.com/gcash/bchutil v0.0.0-20250514010653-ef9bffba99e1
+	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/mark3labs/mcp-go v0.44.0
 	github.com/vultisig/recipes v0.0.0-20260224014344-cb8b6790d744
 	github.com/vultisig/vultisig-go v0.0.0-20260124100803-5ee9e9f8e9d5

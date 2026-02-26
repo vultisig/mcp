@@ -8,7 +8,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/ethereum"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 )
 
 func newConvertAmountTool() mcp.Tool {
@@ -45,7 +45,7 @@ func handleConvertAmount() server.ToolHandlerFunc {
 			if !ok {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid base amount: %q", amountStr)), nil
 			}
-			return mcp.NewToolResultText(ethereum.FormatUnits(val, decimals)), nil
+			return mcp.NewToolResultText(evmclient.FormatUnits(val, decimals)), nil
 
 		default:
 			return mcp.NewToolResultError(fmt.Sprintf("invalid direction: %q (use \"to_base\" or \"to_human\")", direction)), nil

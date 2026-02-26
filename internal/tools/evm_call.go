@@ -12,14 +12,18 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	ethclient "github.com/vultisig/mcp/internal/ethereum"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 )
 
 func newEVMCallTool() mcp.Tool {
 	return mcp.NewTool("evm_call",
 		mcp.WithDescription(
-			"Execute an eth_call (read-only) against a contract. "+
+			"Execute an eth_call (read-only) against a contract on any EVM chain. "+
 				"Returns raw hex output, and optionally decodes it if output_types is provided.",
+		),
+		mcp.WithString("chain",
+			mcp.Description("EVM chain name. One of: "+chainEnumDesc()),
+			mcp.DefaultString("Ethereum"),
 		),
 		mcp.WithString("to",
 			mcp.Description("Contract address (0x-prefixed)."),
@@ -44,8 +48,15 @@ func newEVMCallTool() mcp.Tool {
 	)
 }
 
-func handleEVMCall(ethClient *ethclient.Client) server.ToolHandlerFunc {
+func handleEVMCall(pool *evmclient.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		chainName := req.GetString("chain", "Ethereum")
+
+		client, _, err := pool.Get(ctx, chainName)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("chain %s unavailable: %v", chainName, err)), nil
+		}
+
 		toStr, err := req.RequireString("to")
 		if err != nil {
 			return mcp.NewToolResultError("missing to parameter"), nil
@@ -93,7 +104,7 @@ func handleEVMCall(ethClient *ethclient.Client) server.ToolHandlerFunc {
 			blockNum = bn
 		}
 
-		output, err := ethClient.CallContract(ctx, msg, blockNum)
+		output, err := client.CallContract(ctx, msg, blockNum)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("eth_call failed: %v", err)), nil
 		}

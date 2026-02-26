@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -13,10 +12,10 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	reth "github.com/vultisig/recipes/chain/evm/ethereum"
-	"github.com/vultisig/recipes/sdk/evm"
+	evmsdk "github.com/vultisig/recipes/sdk/evm"
 	aavev3sdk "github.com/vultisig/recipes/sdk/evm/aavev3"
 
-	"github.com/vultisig/mcp/internal/ethereum"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
@@ -36,7 +35,7 @@ func (p *Protocol) SupportsChain(chainID *big.Int) bool {
 	return ok
 }
 
-func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *ethereum.Client, evmSDK *evm.SDK, chainID *big.Int) {
+func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *evmclient.Client, evmSDK *evmsdk.SDK, chainID *big.Int) {
 	deploy, _ := aavev3sdk.GetDeployment(chainID)
 	aaveClient := aavev3sdk.NewClient(ethClient, deploy)
 
@@ -98,21 +97,17 @@ func newGetRatesTool() mcp.Tool {
 	)
 }
 
-func stripHexPrefix(s string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
-}
-
 func evmTxDetails(to string, nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, data string, description string) map[string]string {
 	return map[string]string{
-		"to":                     to,
-		"value":                  "0",
-		"nonce":                  fmt.Sprintf("%d", nonce),
-		"gas_limit":             fmt.Sprintf("%d", gasLimit),
-		"max_fee_per_gas":       maxFeePerGas,
+		"to":                       to,
+		"value":                    "0",
+		"nonce":                    fmt.Sprintf("%d", nonce),
+		"gas_limit":                fmt.Sprintf("%d", gasLimit),
+		"max_fee_per_gas":          maxFeePerGas,
 		"max_priority_fee_per_gas": maxPriorityFeePerGas,
-		"data":                  data,
-		"tx_encoding":           types.TxEncodingEIP1559RLP,
-		"description":           description,
+		"data":                     data,
+		"tx_encoding":              types.TxEncodingEIP1559RLP,
+		"description":              description,
 	}
 }
 
@@ -130,7 +125,7 @@ type txBuildAction struct {
 	contractName string
 }
 
-func handleDeposit(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
+func handleDeposit(store *vault.Store, evmSDK *evmsdk.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
@@ -169,7 +164,7 @@ func handleDeposit(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Cl
 	}
 }
 
-func handleWithdraw(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
+func handleWithdraw(store *vault.Store, evmSDK *evmsdk.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
@@ -206,7 +201,7 @@ func handleWithdraw(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.C
 	}
 }
 
-func handleBorrow(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
+func handleBorrow(store *vault.Store, evmSDK *evmsdk.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
@@ -243,7 +238,7 @@ func handleBorrow(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Cli
 	}
 }
 
-func handleRepay(store *vault.Store, evmSDK *evm.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
+func handleRepay(store *vault.Store, evmSDK *evmsdk.SDK, aaveClient *aavev3sdk.Client, chainID *big.Int) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		assetStr, amountStr, addr, err := extractTxParams(ctx, req, store)
 		if err != nil {
@@ -297,14 +292,14 @@ func handleGetBalances(store *vault.Store, aaveClient *aavev3sdk.Client) server.
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get account data: %v", err)), nil
 		}
 
-		collateral := ethereum.FormatUnits(acct.TotalCollateralBase, 8)
-		debt := ethereum.FormatUnits(acct.TotalDebtBase, 8)
-		available := ethereum.FormatUnits(acct.AvailableBorrowsBase, 8)
+		collateral := evmclient.FormatUnits(acct.TotalCollateralBase, 8)
+		debt := evmclient.FormatUnits(acct.TotalDebtBase, 8)
+		available := evmclient.FormatUnits(acct.AvailableBorrowsBase, 8)
 
 		liqThresholdPct := fmt.Sprintf("%.2f%%", float64(acct.CurrentLiquidationThreshold.Int64())/100.0)
 		ltvPct := fmt.Sprintf("%.2f%%", float64(acct.LTV.Int64())/100.0)
 
-		healthFactor := ethereum.FormatUnits(acct.HealthFactor, 18)
+		healthFactor := evmclient.FormatUnits(acct.HealthFactor, 18)
 		if acct.TotalDebtBase.Sign() == 0 {
 			healthFactor = "∞ (no debt)"
 		}
@@ -405,7 +400,7 @@ func extractTxParams(ctx context.Context, req mcp.CallToolRequest, store *vault.
 	return asset, amount, addr, nil
 }
 
-func decodeTxFields(unsignedTx evm.UnsignedTx) (nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, err error) {
+func decodeTxFields(unsignedTx evmsdk.UnsignedTx) (nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, err error) {
 	txData, err := reth.DecodeUnsignedPayload(unsignedTx)
 	if err != nil {
 		return 0, 0, "", "", fmt.Errorf("decode unsigned tx: %w", err)
@@ -416,7 +411,7 @@ func decodeTxFields(unsignedTx evm.UnsignedTx) (nonce uint64, gasLimit uint64, m
 
 func buildTxResult(
 	ctx context.Context,
-	evmSDK *evm.SDK,
+	evmSDK *evmsdk.SDK,
 	user ethcommon.Address,
 	chainID *big.Int,
 	txs []aavev3sdk.TxData,
@@ -434,7 +429,7 @@ func buildTxResult(
 			gasOverride = gasOverrides[i]
 		}
 
-		var unsignedTx evm.UnsignedTx
+		var unsignedTx evmsdk.UnsignedTx
 		var buildErr error
 		if gasOverride > 0 {
 			unsignedTx, buildErr = evmSDK.MakeTxWithGasLimit(ctx, user, tx.To, tx.Value, tx.Data, uint64(i), gasOverride)

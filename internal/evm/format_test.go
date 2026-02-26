@@ -1,4 +1,4 @@
-package ethereum
+package evm
 
 import (
 	"encoding/binary"
@@ -63,13 +63,9 @@ func TestFormatWei(t *testing.T) {
 
 func TestDecodeABIString(t *testing.T) {
 	t.Run("standard ABI encoding", func(t *testing.T) {
-		// Encode "USDC" as standard ABI string
 		data := make([]byte, 96)
-		// offset = 32
 		data[31] = 0x20
-		// length = 4
 		data[63] = 0x04
-		// "USDC"
 		copy(data[64:], "USDC")
 
 		got, err := DecodeABIString(data)
@@ -82,7 +78,6 @@ func TestDecodeABIString(t *testing.T) {
 	})
 
 	t.Run("bytes32 encoding", func(t *testing.T) {
-		// "MKR" left-aligned, right-padded with zeros (non-standard)
 		data := make([]byte, 32)
 		copy(data, "MKR")
 
@@ -105,11 +100,8 @@ func TestDecodeABIString(t *testing.T) {
 	t.Run("longer standard string", func(t *testing.T) {
 		name := "Wrapped Ether"
 		data := make([]byte, 128)
-		// offset = 32
 		binary.BigEndian.PutUint64(data[24:32], 32)
-		// length
 		binary.BigEndian.PutUint64(data[56:64], uint64(len(name)))
-		// data
 		copy(data[64:], name)
 
 		got, err := DecodeABIString(data)
