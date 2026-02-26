@@ -1,17 +1,23 @@
 package tools
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/programs/system"
 
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
+	sdk "github.com/vultisig/recipes/sdk"
+	solanasdk "github.com/vultisig/recipes/sdk/solana"
 )
 
 func TestBuildSolanaTx_InvalidAmount(t *testing.T) {
@@ -220,6 +226,143 @@ func TestBuildSolanaTx_Integration(t *testing.T) {
 	_, err = solana.TransactionFromBytes(decoded)
 	if err != nil {
 		t.Fatalf("tx roundtrip failed: %v", err)
+	}
+}
+
+func TestBuildSolanaTx_SDKCompatibility(t *testing.T) {
+	from := solana.MustPublicKeyFromBase58("7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA")
+	to := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
+
+	transferInst := system.NewTransferInstruction(1_000_000, from, to).Build()
+
+	dummyBlockhash := solana.MustHashFromBase58("11111111111111111111111111111111")
+	tx, err := solana.NewTransaction(
+		[]solana.Instruction{transferInst},
+		dummyBlockhash,
+		solana.TransactionPayer(from),
+	)
+	if err != nil {
+		t.Fatalf("create transaction: %v", err)
+	}
+
+	txBytes, err := tx.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal transaction: %v", err)
+	}
+
+	verifySolanaSDKCompat(t, txBytes, 1)
+}
+
+func TestBuildSPLTransferTx_SDKCompatibility(t *testing.T) {
+	from := solana.MustPublicKeyFromBase58("7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA")
+	to := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
+	mint := solana.MustPublicKeyFromBase58("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+	tokenProgram := solana.TokenProgramID
+
+	sourceATA, _, err := solanaclient.FindAssociatedTokenAddress(from, mint, tokenProgram)
+	if err != nil {
+		t.Fatalf("find source ATA: %v", err)
+	}
+	destATA, _, err := solanaclient.FindAssociatedTokenAddress(to, mint, tokenProgram)
+	if err != nil {
+		t.Fatalf("find dest ATA: %v", err)
+	}
+
+	var instructions []solana.Instruction
+
+	createATAInst := solana.NewInstruction(
+		solana.SPLAssociatedTokenAccountProgramID,
+		[]*solana.AccountMeta{
+			{PublicKey: from, IsSigner: true, IsWritable: true},
+			{PublicKey: destATA, IsSigner: false, IsWritable: true},
+			{PublicKey: to, IsSigner: false, IsWritable: false},
+			{PublicKey: mint, IsSigner: false, IsWritable: false},
+			{PublicKey: solana.SystemProgramID, IsSigner: false, IsWritable: false},
+			{PublicKey: tokenProgram, IsSigner: false, IsWritable: false},
+		},
+		[]byte{0},
+	)
+	instructions = append(instructions, createATAInst)
+
+	transferData := make([]byte, 10)
+	transferData[0] = 12
+	binary.LittleEndian.PutUint64(transferData[1:9], 1_000_000)
+	transferData[9] = 6
+
+	transferInst := solana.NewInstruction(
+		tokenProgram,
+		[]*solana.AccountMeta{
+			{PublicKey: sourceATA, IsSigner: false, IsWritable: true},
+			{PublicKey: mint, IsSigner: false, IsWritable: false},
+			{PublicKey: destATA, IsSigner: false, IsWritable: true},
+			{PublicKey: from, IsSigner: true, IsWritable: false},
+		},
+		transferData,
+	)
+	instructions = append(instructions, transferInst)
+
+	dummyBlockhash := solana.MustHashFromBase58("11111111111111111111111111111111")
+	tx, err := solana.NewTransaction(
+		instructions,
+		dummyBlockhash,
+		solana.TransactionPayer(from),
+	)
+	if err != nil {
+		t.Fatalf("create transaction: %v", err)
+	}
+
+	txBytes, err := tx.MarshalBinary()
+	if err != nil {
+		t.Fatalf("marshal transaction: %v", err)
+	}
+
+	verifySolanaSDKCompat(t, txBytes, 2)
+}
+
+func verifySolanaSDKCompat(t *testing.T, txBytes []byte, wantInstructions int) {
+	t.Helper()
+
+	solSDK := solanasdk.NewSDK(nil)
+	hashes, err := solSDK.DeriveSigningHashes(txBytes, sdk.DeriveOptions{})
+	if err != nil {
+		t.Fatalf("DeriveSigningHashes: %v", err)
+	}
+
+	if len(hashes) != 1 {
+		t.Fatalf("expected 1 derived hash, got %d", len(hashes))
+	}
+
+	dh := hashes[0]
+	if len(dh.Message) == 0 {
+		t.Fatal("message is empty")
+	}
+	if len(dh.Hash) != 32 {
+		t.Fatalf("expected 32-byte hash, got %d", len(dh.Hash))
+	}
+
+	wantHash := sha256.Sum256(dh.Message)
+	if !bytes.Equal(dh.Hash, wantHash[:]) {
+		t.Error("Hash != SHA256(Message)")
+	}
+
+	parsedTx, err := solana.TransactionFromBytes(txBytes)
+	if err != nil {
+		t.Fatalf("TransactionFromBytes: %v", err)
+	}
+	if parsedTx.Message.Header.NumRequiredSignatures != 1 {
+		t.Errorf("expected 1 required signature, got %d", parsedTx.Message.Header.NumRequiredSignatures)
+	}
+	if len(parsedTx.Message.Instructions) != wantInstructions {
+		t.Errorf("expected %d instructions, got %d", wantInstructions, len(parsedTx.Message.Instructions))
+	}
+
+	hexStr := hex.EncodeToString(txBytes)
+	decoded, err := hex.DecodeString(hexStr)
+	if err != nil {
+		t.Fatalf("hex round-trip: %v", err)
+	}
+	if !bytes.Equal(decoded, txBytes) {
+		t.Error("hex round-trip mismatch")
 	}
 }
 
