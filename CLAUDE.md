@@ -34,6 +34,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `EVM_ZKSYNC_URL` | `https://mainnet.era.zksync.io` | zkSync Era endpoint |
 | `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
+| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
 
 ## Architecture
 
@@ -62,15 +63,17 @@ internal/tools/
   search_token.go                # Token discovery via CoinGecko API
   abi_encode.go                  # ABI encode function calls / raw args
   abi_decode.go                  # ABI decode output data
-  convert_amount.go              # Convert between human and base units
+  convert_amount.go 
+  registry.go 
+internal/coingecko/client.go     # CoinGecko REST API client
+internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
+internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
+internal/tools/
   get_utxo_balance.go            # Query UTXO chain address balance
   get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
   list_utxos.go                  # List unspent transaction outputs
-internal/coingecko/client.go     # CoinGecko REST API client
-internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
-internal/protocols/
-  registry.go                    # Protocol registration (called from tools.RegisterAll)
-  aavev3/tools.go                # Aave V3 deposit/withdraw/borrow/repay tools
+  btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
+  build_btc_send.go    
 ```
 
 ## Key Dependencies
@@ -78,8 +81,9 @@ internal/protocols/
 - `github.com/mark3labs/mcp-go` — MCP server framework (stdio, tool registration)
 - `github.com/kelseyhightower/envconfig` — Struct-tag-based env config
 - `github.com/vultisig/vultisig-go` — Address derivation from vault keys
+- `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), and swap operations
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
-- `github.com/vultisig/recipes` — EVM SDK, swap SDK, ABI codegens
+- `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
 
 ## EVM Chains
 

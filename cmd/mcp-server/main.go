@@ -8,6 +8,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
+	btcsdk "github.com/vultisig/recipes/sdk/btc"
+	"github.com/vultisig/recipes/sdk/evm"
 	"github.com/vultisig/recipes/sdk/swap"
 
 	"github.com/vultisig/mcp/internal/blockchair"
@@ -16,6 +18,7 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/skills"
+	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -49,6 +52,8 @@ func main() {
 	)
 
 	swapSvc := swap.NewService()
+	utxoBuilder := btcsdk.Mainnet()
+	tcClient := thorchain.NewClient(cfg.ThorchainURL)
 	tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc)
 	skills.RegisterMCPResources(s)
 
