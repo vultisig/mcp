@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -50,18 +51,24 @@ func handleEVMCheckAllowance(store *vault.Store, pool *evmclient.Pool) server.To
 		if err != nil {
 			return mcp.NewToolResultError("missing contract_address"), nil
 		}
-
+		if !common.IsHexAddress(contractAddr) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid contract_address: %s", contractAddr)), nil
+		}
 		spender, err := req.RequireString("spender")
 		if err != nil {
 			return mcp.NewToolResultError("missing spender"), nil
 		}
-
+		if !common.IsHexAddress(spender) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid spender: %s", spender)), nil
+		}
 		explicit := req.GetString("owner", "")
+		if explicit != "" && !common.IsHexAddress(explicit) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid owner: %s", explicit)), nil
+		}
 		owner, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-
 		allowance, decimals, symbol, err := client.GetAllowance(ctx, contractAddr, owner, spender)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get allowance: %v", err)), nil

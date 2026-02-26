@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"fmt"
+
 	"github.com/mark3labs/mcp-go/server"
 
 	btcsdk "github.com/vultisig/recipes/sdk/btc"
@@ -14,7 +16,7 @@ import (
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client) {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client) error {
 	s.AddTool(newSetVaultInfoTool(), handleSetVaultInfo(store))
 	s.AddTool(newGetAddressTool(), handleGetAddress(store))
 	s.AddTool(newEVMGetBalanceTool(), handleEVMGetBalance(store, pool))
@@ -35,5 +37,9 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newBTCFeeRateTool(), handleBTCFeeRate(tcClient))
 	s.AddTool(newBuildBTCSendTool(), handleBuildBTCSend(store, utxoBuilder, bcClient))
 
-	protocols.RegisterAll(s, store, pool)
+	err := protocols.RegisterAll(s, store, pool)
+	if err != nil {
+		return fmt.Errorf("register protocols: %w", err)
+	}
+	return nil
 }

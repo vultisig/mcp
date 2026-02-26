@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -38,11 +39,13 @@ func handleEVMGetBalance(store *vault.Store, pool *evmclient.Pool) server.ToolHa
 		}
 
 		explicit := req.GetString("address", "")
+		if explicit != "" && !common.IsHexAddress(explicit) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s", explicit)), nil
+		}
 		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-
 		balance, err := client.GetNativeBalance(ctx, addr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get balance: %v", err)), nil

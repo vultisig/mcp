@@ -68,7 +68,7 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 
 		chainID, ok := evmclient.ChainIDByName(chainName)
 		if !ok {
-			chainID = big.NewInt(1)
+			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain: %s", chainName)), nil
 		}
 		if cidStr := req.GetString("chain_id", ""); cidStr != "" {
 			cid, ok := new(big.Int).SetString(cidStr, 10)

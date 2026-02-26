@@ -2,6 +2,7 @@ package protocols
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -25,10 +26,10 @@ var all = []Protocol{
 
 // RegisterAll extracts the Ethereum client from the pool and registers all
 // protocol tools that support the connected chain.
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool) {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool) error {
 	ethClient, ethChainID, err := pool.Get(context.Background(), "Ethereum")
 	if err != nil {
-		return
+		return fmt.Errorf("connect to Ethereum: %w", err)
 	}
 
 	ethSDK := evmsdk.NewSDK(ethChainID, ethClient.ETH(), ethClient.RawRPC())
@@ -38,4 +39,5 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool) 
 			p.Register(s, store, ethClient, ethSDK, ethChainID)
 		}
 	}
+	return nil
 }

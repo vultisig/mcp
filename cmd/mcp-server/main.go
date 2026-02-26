@@ -53,7 +53,9 @@ func main() {
 	swapSvc := swap.NewService()
 	utxoBuilder := btcsdk.Mainnet()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
-	tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient)
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient); err != nil {
+		logger.Printf("[WARN] some tools not registered: %v", err)
+	}
 	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {
