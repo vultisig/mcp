@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -9,13 +8,12 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/recipes/sdk/evm"
 	"github.com/vultisig/recipes/sdk/swap"
 
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	"github.com/vultisig/mcp/internal/config"
-	"github.com/vultisig/mcp/internal/ethereum"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/skills"
 	"github.com/vultisig/mcp/internal/tools"
@@ -26,23 +24,15 @@ func main() {
 	httpAddr := flag.String("http", "", "HTTP listen address (e.g. :8080). If empty, serves over stdio.")
 	flag.Parse()
 
-	cfg := config.Load()
-
 	logger := log.New(os.Stderr, "[mcp] ", log.LstdFlags|log.Lmicroseconds)
 
-	ethClient, err := ethereum.NewClient(cfg.ETHRPCURL)
+	cfg, err := config.Load()
 	if err != nil {
-		logger.Fatalf("failed to create ethereum client: %v", err)
+		logger.Fatalf("failed to load config: %v", err)
 	}
-	defer ethClient.Close()
 
-	chainID, err := ethClient.ChainID(context.Background())
-	if err != nil {
-		logger.Fatalf("failed to detect chain ID: %v", err)
-	}
-	logger.Printf("connected to chain %s (RPC: %s)", chainID.String(), cfg.ETHRPCURL)
-
-	evmSDK := evm.NewSDK(chainID, ethClient.ETH(), ethClient.RawRPC())
+	evmPool := evmclient.NewPool(cfg.EVM.ToURLMap())
+	defer evmPool.Close()
 
 	store := vault.NewStore()
 	cgClient := coingecko.NewClient(cfg.CoinGeckoAPIKey)
@@ -59,7 +49,7 @@ func main() {
 	)
 
 	swapSvc := swap.NewService()
-	tools.RegisterAll(s, store, ethClient, evmSDK, chainID, cgClient, bcClient, swapSvc)
+	tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc)
 	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {

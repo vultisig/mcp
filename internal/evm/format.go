@@ -1,4 +1,4 @@
-package ethereum
+package evm
 
 import (
 	"encoding/binary"
@@ -23,7 +23,6 @@ func FormatUnits(wei *big.Int, decimals int) string {
 		return whole.String()
 	}
 
-	// Pad remainder with leading zeros to `decimals` width, then trim trailing zeros.
 	fracStr := fmt.Sprintf("%0*s", decimals, remainder.String())
 	fracStr = strings.TrimRight(fracStr, "0")
 
@@ -38,7 +37,6 @@ func DecodeABIString(data []byte) (string, error) {
 		return "", fmt.Errorf("data too short: %d bytes", len(data))
 	}
 
-	// Try standard ABI decoding: first 32 bytes = offset, then length, then data.
 	offset := new(big.Int).SetBytes(data[:32])
 	if offset.Cmp(big.NewInt(int64(len(data)))) < 0 && offset.Int64() >= 32 {
 		off := int(offset.Int64())
@@ -50,7 +48,6 @@ func DecodeABIString(data []byte) (string, error) {
 		}
 	}
 
-	// Fallback: treat as bytes32 (null-terminated or right-padded).
 	s := strings.TrimRight(string(data[:32]), "\x00")
 	if isPrintable(s) && len(s) > 0 {
 		return s, nil

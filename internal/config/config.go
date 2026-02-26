@@ -1,30 +1,69 @@
 package config
 
-import "os"
+import (
+	"fmt"
 
-const (
-	defaultETHRPCURL    = "https://ethereum-rpc.publicnode.com"
-	defaultBlockchairURL = "https://api.vultisig.com/blockchair"
+	"github.com/kelseyhightower/envconfig"
+
+	"github.com/vultisig/mcp/internal/evm"
 )
 
 type Config struct {
-	ETHRPCURL       string
-	CoinGeckoAPIKey string
-	BlockchairURL   string
+	EVM             EVMRPCConfig
+	CoinGeckoAPIKey string `envconfig:"COINGECKO_API_KEY"`
+	BlockchairURL   string `envconfig:"BLOCKCHAIR_API_URL" default:"https://api.vultisig.com/blockchair"`
 }
 
-func Load() Config {
-	rpcURL := os.Getenv("ETH_RPC_URL")
-	if rpcURL == "" {
-		rpcURL = defaultETHRPCURL
+// EVMRPCConfig holds RPC endpoint URLs for all supported EVM chains.
+// Each field maps to an environment variable named EVM_{CHAIN}_URL
+// (e.g. EVM_ETHEREUM_URL, EVM_BSC_URL, EVM_POLYGON_URL, …).
+// If a variable is unset, the public-node default is used.
+type EVMRPCConfig struct {
+	Ethereum  RPCItem
+	BSC       RPCItem
+	Polygon   RPCItem
+	Avalanche RPCItem
+	Arbitrum  RPCItem
+	Optimism  RPCItem
+	Base      RPCItem
+	Blast     RPCItem
+	Mantle    RPCItem
+	Zksync    RPCItem
+}
+
+type RPCItem struct {
+	URL string
+}
+
+// ToURLMap converts the EVM RPC config to a chain-name → URL map,
+// falling back to the built-in defaults for any URL that is empty.
+func (e EVMRPCConfig) ToURLMap() map[string]string {
+	m := map[string]string{
+		"Ethereum":  e.Ethereum.URL,
+		"BSC":       e.BSC.URL,
+		"Polygon":   e.Polygon.URL,
+		"Avalanche": e.Avalanche.URL,
+		"Arbitrum":  e.Arbitrum.URL,
+		"Optimism":  e.Optimism.URL,
+		"Base":      e.Base.URL,
+		"Blast":     e.Blast.URL,
+		"Mantle":    e.Mantle.URL,
+		"Zksync":    e.Zksync.URL,
 	}
-	blockchairURL := os.Getenv("BLOCKCHAIR_API_URL")
-	if blockchairURL == "" {
-		blockchairURL = defaultBlockchairURL
+	defaults := evm.DefaultRPCURLs()
+	for chain, url := range m {
+		if url == "" {
+			m[chain] = defaults[chain]
+		}
 	}
-	return Config{
-		ETHRPCURL:       rpcURL,
-		CoinGeckoAPIKey: os.Getenv("COINGECKO_API_KEY"),
-		BlockchairURL:   blockchairURL,
+	return m
+}
+
+func Load() (Config, error) {
+	var cfg Config
+	err := envconfig.Process("", &cfg)
+	if err != nil {
+		return Config{}, fmt.Errorf("process env config: %w", err)
 	}
+	return cfg, nil
 }

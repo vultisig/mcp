@@ -1,4 +1,4 @@
-package ethereum
+package evm
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type Client struct {
 func NewClient(rpcURL string) (*Client, error) {
 	eth, err := ethclient.Dial(rpcURL)
 	if err != nil {
-		return nil, fmt.Errorf("dial ethereum rpc: %w", err)
+		return nil, fmt.Errorf("dial evm rpc: %w", err)
 	}
 	return &Client{eth: eth, rawRPC: eth.Client()}, nil
 }
@@ -50,12 +50,12 @@ func (c *Client) RawRPC() *rpc.Client {
 	return c.rawRPC
 }
 
-// GetETHBalance returns the native ETH balance formatted in ETH units.
-func (c *Client) GetETHBalance(ctx context.Context, addr string) (string, error) {
+// GetNativeBalance returns the native coin balance formatted in human-readable units.
+func (c *Client) GetNativeBalance(ctx context.Context, addr string) (string, error) {
 	address := ethcommon.HexToAddress(addr)
 	balance, err := c.eth.BalanceAt(ctx, address, nil)
 	if err != nil {
-		return "", fmt.Errorf("get eth balance: %w", err)
+		return "", fmt.Errorf("get native balance: %w", err)
 	}
 	return FormatUnits(balance, 18), nil
 }
@@ -106,6 +106,51 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAddr, holderAddr stri
 		Symbol:   symbol,
 		Decimals: decimals,
 	}, nil
+}
+
+// GetAllowance returns the ERC-20 token allowance for a spender.
+func (c *Client) GetAllowance(ctx context.Context, tokenAddr, ownerAddr, spenderAddr string) (*big.Int, uint8, string, error) {
+	token := ethcommon.HexToAddress(tokenAddr)
+	owner := ethcommon.HexToAddress(ownerAddr)
+	spender := ethcommon.HexToAddress(spenderAddr)
+
+	allowanceData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
+		To:   &token,
+		Data: erc20Codec.PackAllowance(owner, spender),
+	}, nil)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("call allowance(): %w", err)
+	}
+	allowance, err := erc20Codec.UnpackAllowance(allowanceData)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("decode allowance: %w", err)
+	}
+
+	decimalsData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
+		To:   &token,
+		Data: erc20Codec.PackDecimals(),
+	}, nil)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("call decimals(): %w", err)
+	}
+	decimals, err := erc20Codec.UnpackDecimals(decimalsData)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("decode decimals: %w", err)
+	}
+
+	symbolData, err := c.eth.CallContract(ctx, ethereum.CallMsg{
+		To:   &token,
+		Data: erc20Codec.PackSymbol(),
+	}, nil)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("call symbol(): %w", err)
+	}
+	symbol, err := DecodeABIString(symbolData)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("decode symbol: %w", err)
+	}
+
+	return allowance, decimals, symbol, nil
 }
 
 // ChainID returns the chain ID of the connected network.

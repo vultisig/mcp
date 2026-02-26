@@ -11,7 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	ethclient "github.com/vultisig/mcp/internal/ethereum"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -19,9 +19,13 @@ import (
 func newEVMTxInfoTool() mcp.Tool {
 	return mcp.NewTool("evm_tx_info",
 		mcp.WithDescription(
-			"Get nonce, gas prices, and chain ID for building an EVM transaction. "+
+			"Get nonce, gas prices, and chain ID for building an EVM transaction on any EVM chain. "+
 				"If to/data/value are provided, also estimates gas. "+
 				"Address falls back to vault-derived if not provided.",
+		),
+		mcp.WithString("chain",
+			mcp.Description("EVM chain name. One of: "+chainEnumDesc()),
+			mcp.DefaultString("Ethereum"),
 		),
 		mcp.WithString("address",
 			mcp.Description("Sender address (0x-prefixed). Optional if vault info is set."),
@@ -38,8 +42,15 @@ func newEVMTxInfoTool() mcp.Tool {
 	)
 }
 
-func handleEVMTxInfo(store *vault.Store, ethClient *ethclient.Client, chainID *big.Int) server.ToolHandlerFunc {
+func handleEVMTxInfo(store *vault.Store, pool *evmclient.Pool) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		chainName := req.GetString("chain", "Ethereum")
+
+		client, chainID, err := pool.Get(ctx, chainName)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("chain %s unavailable: %v", chainName, err)), nil
+		}
+
 		explicit := req.GetString("address", "")
 		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
@@ -48,35 +59,34 @@ func handleEVMTxInfo(store *vault.Store, ethClient *ethclient.Client, chainID *b
 
 		address := common.HexToAddress(addr)
 
-		nonce, err := ethClient.PendingNonce(ctx, address)
+		nonce, err := client.PendingNonce(ctx, address)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get nonce: %v", err)), nil
 		}
 
-		tipCap, err := ethClient.SuggestGasTipCap(ctx)
+		tipCap, err := client.SuggestGasTipCap(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get gas tip cap: %v", err)), nil
 		}
 
-		baseFee, err := ethClient.LatestBaseFee(ctx)
+		baseFee, err := client.LatestBaseFee(ctx)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to get base fee: %v", err)), nil
 		}
 
-		// suggested_max_fee = base_fee * 2 + tip
 		suggestedMaxFee := new(big.Int).Mul(baseFee, big.NewInt(2))
 		suggestedMaxFee.Add(suggestedMaxFee, tipCap)
 
 		resp := map[string]any{
-			"address":                  addr,
-			"chain_id":                 chainID.String(),
-			"nonce":                    nonce,
-			"base_fee_per_gas":         baseFee.String(),
-			"max_priority_fee_per_gas": tipCap.String(),
+			"chain":                     chainName,
+			"address":                   addr,
+			"chain_id":                  chainID.String(),
+			"nonce":                     nonce,
+			"base_fee_per_gas":          baseFee.String(),
+			"max_priority_fee_per_gas":  tipCap.String(),
 			"suggested_max_fee_per_gas": suggestedMaxFee.String(),
 		}
 
-		// If to is provided, attempt gas estimation.
 		if toStr := req.GetString("to", ""); toStr != "" {
 			if !common.IsHexAddress(toStr) {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %s", toStr)), nil
@@ -104,7 +114,7 @@ func handleEVMTxInfo(store *vault.Store, ethClient *ethclient.Client, chainID *b
 				msg.Value = val
 			}
 
-			gasEstimate, err := ethClient.EstimateGas(ctx, msg)
+			gasEstimate, err := client.EstimateGas(ctx, msg)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("gas estimation failed: %v", err)), nil
 			}

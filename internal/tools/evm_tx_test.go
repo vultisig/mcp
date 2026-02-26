@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"math/big"
 	"testing"
 
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -204,7 +203,7 @@ func TestConvertAmount_USDT(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBuildEVMTx_SparkTransactions(t *testing.T) {
-	handler := handleBuildEVMTx(big.NewInt(1))
+	handler := handleBuildEVMTx()
 	ctx := context.Background()
 
 	tests := []struct {
@@ -306,10 +305,10 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 				"value":                    tt.value,
 				"data":                     tt.data,
 				"nonce":                    tt.nonce,
-				"gas_limit":               tt.gasLimit,
+				"gas_limit":                tt.gasLimit,
 				"max_fee_per_gas":          tt.maxFeePerGas,
 				"max_priority_fee_per_gas": tt.maxPriorityFee,
-				"chain_id":                "1",
+				"chain_id":                 "1",
 			})
 			res, err := handler(ctx, req)
 			if err != nil {
@@ -524,7 +523,7 @@ func TestSparkDepositWorkflow(t *testing.T) {
 	json.Unmarshal([]byte(resultText(t, depositRes)), &deposit)
 
 	// Step 5: Build all three transactions in sequence.
-	buildHandler := handleBuildEVMTx(big.NewInt(1))
+	buildHandler := handleBuildEVMTx()
 	txCases := []struct {
 		name string
 		to   string
@@ -542,10 +541,10 @@ func TestSparkDepositWorkflow(t *testing.T) {
 				"value":                    "0",
 				"data":                     tc.data,
 				"nonce":                    "7",
-				"gas_limit":               "100000",
+				"gas_limit":                "100000",
 				"max_fee_per_gas":          "100000000",
 				"max_priority_fee_per_gas": "1000",
-				"chain_id":                "1",
+				"chain_id":                 "1",
 			}))
 			if err != nil {
 				t.Fatalf("build_evm_tx[%d]: %v", i, err)
@@ -618,16 +617,16 @@ func TestSparkWithdrawWorkflow(t *testing.T) {
 	}
 
 	// Step 3: Build the withdraw transaction with on-chain parameters (nonce 13).
-	buildHandler := handleBuildEVMTx(big.NewInt(1))
+	buildHandler := handleBuildEVMTx()
 	res, err := buildHandler(ctx, callToolReq("build_evm_tx", map[string]any{
 		"to":                       sparkVault,
 		"value":                    "0",
 		"data":                     withdraw.Encoded,
 		"nonce":                    "13",
-		"gas_limit":               "104414",
+		"gas_limit":                "104414",
 		"max_fee_per_gas":          "133342876",
 		"max_priority_fee_per_gas": "15750",
-		"chain_id":                "1",
+		"chain_id":                 "1",
 	}))
 	if err != nil {
 		t.Fatalf("build_evm_tx: %v", err)
@@ -681,7 +680,7 @@ func TestSparkWithdrawWorkflow(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestBuildEVMTx_Deterministic(t *testing.T) {
-	handler := handleBuildEVMTx(big.NewInt(1))
+	handler := handleBuildEVMTx()
 	ctx := context.Background()
 
 	args := map[string]any{
@@ -689,10 +688,10 @@ func TestBuildEVMTx_Deterministic(t *testing.T) {
 		"value":                    "0",
 		"data":                     "0x6e553f6500000000000000000000000000000000000000000000000000000000000f4240000000000000000000000000e721dd7a654d7e95518014526f6897def6a44933",
 		"nonce":                    "12",
-		"gas_limit":               "105313",
+		"gas_limit":                "105313",
 		"max_fee_per_gas":          "82751424",
 		"max_priority_fee_per_gas": "15750",
-		"chain_id":                "1",
+		"chain_id":                 "1",
 	}
 
 	var hexes [2]string
