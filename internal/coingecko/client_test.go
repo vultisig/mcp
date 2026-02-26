@@ -2,21 +2,11 @@ package coingecko
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
-func apiKey(t *testing.T) string {
-	t.Helper()
-	key := os.Getenv("COINGECKO_API_KEY")
-	if key == "" {
-		t.Skip("COINGECKO_API_KEY not set")
-	}
-	return key
-}
-
 func TestSearch(t *testing.T) {
-	c := NewClient(apiKey(t))
+	c := NewClient()
 	coins, err := c.Search(context.Background(), "USDC")
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -41,7 +31,7 @@ func TestSearch(t *testing.T) {
 }
 
 func TestCoinDetail_Token(t *testing.T) {
-	c := NewClient(apiKey(t))
+	c := NewClient()
 	detail, err := c.CoinDetail(context.Background(), "usd-coin")
 	if err != nil {
 		t.Fatalf("CoinDetail: %v", err)
@@ -67,7 +57,7 @@ func TestCoinDetail_Token(t *testing.T) {
 }
 
 func TestCoinDetail_NativeAsset(t *testing.T) {
-	c := NewClient(apiKey(t))
+	c := NewClient()
 	detail, err := c.CoinDetail(context.Background(), "bitcoin")
 	if err != nil {
 		t.Fatalf("CoinDetail: %v", err)
@@ -89,7 +79,7 @@ func TestCoinDetail_NativeAsset(t *testing.T) {
 }
 
 func TestSearch_Cache(t *testing.T) {
-	c := NewClient(apiKey(t))
+	c := NewClient()
 	ctx := context.Background()
 
 	// First call populates cache.
@@ -110,7 +100,7 @@ func TestSearch_Cache(t *testing.T) {
 }
 
 func TestCoinDetail_Cache(t *testing.T) {
-	c := NewClient(apiKey(t))
+	c := NewClient()
 	ctx := context.Background()
 
 	d1, err := c.CoinDetail(ctx, "ethereum")

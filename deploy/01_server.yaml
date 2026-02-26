@@ -50,11 +50,6 @@ spec:
                 configMapKeyRef:
                   name: mcp-config
                   key: blockchair-api-url
-            - name: COINGECKO_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: mcp-secrets
-                  key: coingecko-api-key
           resources:
             requests:
               memory: "32Mi"

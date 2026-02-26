@@ -38,7 +38,7 @@ func main() {
 	defer evmPool.Close()
 
 	store := vault.NewStore()
-	cgClient := coingecko.NewClient(cfg.CoinGeckoAPIKey)
+	cgClient := coingecko.NewClient()
 	bcClient := blockchair.NewClient(cfg.BlockchairURL)
 
 	hooks := mcplog.NewHooks(logger)
