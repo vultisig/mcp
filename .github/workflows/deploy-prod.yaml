@@ -7,7 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  NS: mcp
+  NS: agent
 
 jobs:
   build-server:
