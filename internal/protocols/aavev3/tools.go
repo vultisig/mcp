@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -96,10 +95,6 @@ func newGetRatesTool() mcp.Tool {
 		mcp.WithDescription("Query Aave V3 supply APY, variable borrow APY, and reserve configuration for a given token."),
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
 	)
-}
-
-func stripHexPrefix(s string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
 }
 
 func evmTxDetails(to string, nonce uint64, gasLimit uint64, maxFeePerGas string, maxPriorityFeePerGas string, data string, description string) map[string]string {
