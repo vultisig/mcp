@@ -9,7 +9,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	btcsdk "github.com/vultisig/recipes/sdk/btc"
-	"github.com/vultisig/recipes/sdk/evm"
 	"github.com/vultisig/recipes/sdk/swap"
 
 	"github.com/vultisig/mcp/internal/blockchair"
@@ -54,7 +53,7 @@ func main() {
 	swapSvc := swap.NewService()
 	utxoBuilder := btcsdk.Mainnet()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
-	tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc)
+	tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient)
 	skills.RegisterMCPResources(s)
 
 	if *httpAddr != "" {

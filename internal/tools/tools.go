@@ -14,7 +14,7 @@ import (
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service,utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client) ) {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, utxoBuilder *btcsdk.Builder, tcClient *thorchain.Client) {
 	s.AddTool(newSetVaultInfoTool(), handleSetVaultInfo(store))
 	s.AddTool(newGetAddressTool(), handleGetAddress(store))
 	s.AddTool(newEVMGetBalanceTool(), handleEVMGetBalance(store, pool))

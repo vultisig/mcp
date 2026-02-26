@@ -8,6 +8,27 @@ import (
 	"github.com/vultisig/mcp/internal/evm"
 )
 
+// EVMRPCConfig holds RPC endpoint URLs for all supported EVM chains.
+// Each field maps to an environment variable named EVM_{CHAIN}_URL
+// (e.g. EVM_ETHEREUM_URL, EVM_BSC_URL, EVM_POLYGON_URL, …).
+// If a variable is unset, the public-node default is used.
+type EVMRPCConfig struct {
+	Ethereum  RPCItem
+	BSC       RPCItem
+	Polygon   RPCItem
+	Avalanche RPCItem
+	Arbitrum  RPCItem
+	Optimism  RPCItem
+	Base      RPCItem
+	Blast     RPCItem
+	Mantle    RPCItem
+	Zksync    RPCItem
+}
+
+type RPCItem struct {
+	URL string
+}
+
 type Config struct {
 	EVM             EVMRPCConfig
 	CoinGeckoAPIKey string `envconfig:"COINGECKO_API_KEY"`
