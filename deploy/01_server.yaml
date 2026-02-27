@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
         - name: mcp-server
-          image: ghcr.io/vultisig/mcp/mcp-server:v1.0.0
+          image: ghcr.io/vultisig/mcp/mcp-server:v1.0.1
           command: ["/app/main", "-http", ":80"]
           ports:
             - containerPort: 80
