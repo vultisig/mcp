@@ -221,6 +221,71 @@ func TestGetSwapInstructions_MockServer(t *testing.T) {
 	}
 }
 
+func TestInstructionDataToInstruction_InvalidAccountPubkey(t *testing.T) {
+	inst := InstructionData{
+		ProgramId: solana.SystemProgramID.String(),
+		Accounts: []Account{
+			{Pubkey: "not-a-valid-pubkey", IsSigner: false, IsWritable: false},
+		},
+		Data: "AQAAAA==",
+	}
+
+	_, err := inst.ToInstruction()
+	if err == nil {
+		t.Fatal("expected error for invalid account pubkey")
+	}
+}
+
+func TestBuildSwapTransaction_RejectsAddressLookupTables(t *testing.T) {
+	reqCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/swap/v1/quote":
+			json.NewEncoder(w).Encode(QuoteResponse{
+				InputMint:            solana.SolMint.String(),
+				InAmount:             "1000000",
+				OutputMint:           "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+				OutAmount:            "500",
+				OtherAmountThreshold: "495",
+				SlippageBps:          100,
+			})
+		case "/swap/v1/swap-instructions":
+			json.NewEncoder(w).Encode(SwapInstructionsResponse{
+				ComputeBudgetInstructions: []InstructionData{},
+				SetupInstructions:         []InstructionData{},
+				SwapInstruction: InstructionData{
+					ProgramId: solana.SystemProgramID.String(),
+					Accounts:  []Account{},
+					Data:      "AQAAAA==",
+				},
+				AddressLookupTableAddresses: []string{"SomeLookupTable111111111111111111111111111111"},
+			})
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+		reqCount++
+	}))
+	defer srv.Close()
+
+	rpcSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"context":{"slot":1},"value":{"blockhash":"11111111111111111111111111111111","lastValidBlockHeight":100}}}`))
+	}))
+	defer rpcSrv.Close()
+
+	client := NewClient(srv.URL, rpc.New(rpcSrv.URL))
+	ctx := context.Background()
+
+	_, err := client.BuildSwapTransaction(ctx, "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA", "", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", big.NewInt(1_000_000), 100)
+	if err == nil {
+		t.Fatal("expected error for address lookup tables")
+	}
+	if reqCount == 0 {
+		t.Fatal("expected at least one request to mock server")
+	}
+}
+
 func TestGetQuote_APIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"no routes found"}`, http.StatusBadRequest)
