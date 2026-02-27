@@ -87,17 +87,17 @@ func (c *Client) BuildSwapTransaction(
 	var allInstructions []solana.Instruction
 
 	for i, inst := range insts.ComputeBudgetInstructions {
-		typed, er := inst.ToInstruction()
-		if er != nil {
-			return nil, fmt.Errorf("parse compute budget instruction %d: %w", i, er)
+		typed, err := inst.ToInstruction()
+		if err != nil {
+			return nil, fmt.Errorf("parse compute budget instruction %d: %w", i, err)
 		}
 		allInstructions = append(allInstructions, typed)
 	}
 
 	for i, inst := range insts.SetupInstructions {
-		typed, er := inst.ToInstruction()
-		if er != nil {
-			return nil, fmt.Errorf("parse setup instruction %d: %w", i, er)
+		typed, err := inst.ToInstruction()
+		if err != nil {
+			return nil, fmt.Errorf("parse setup instruction %d: %w", i, err)
 		}
 		allInstructions = append(allInstructions, typed)
 	}
@@ -109,9 +109,9 @@ func (c *Client) BuildSwapTransaction(
 	allInstructions = append(allInstructions, swapInst)
 
 	if insts.CleanupInstruction != nil {
-		cleanupInst, er := insts.CleanupInstruction.ToInstruction()
-		if er != nil {
-			return nil, fmt.Errorf("parse cleanup instruction: %w", er)
+		cleanupInst, err := insts.CleanupInstruction.ToInstruction()
+		if err != nil {
+			return nil, fmt.Errorf("parse cleanup instruction: %w", err)
 		}
 		allInstructions = append(allInstructions, cleanupInst)
 	}
@@ -318,9 +318,9 @@ func (i InstructionData) ToInstruction() (solana.Instruction, error) {
 
 	accounts := make([]*solana.AccountMeta, 0, len(i.Accounts))
 	for _, acc := range i.Accounts {
-		pk, er := solana.PublicKeyFromBase58(acc.Pubkey)
-		if er != nil {
-			return nil, fmt.Errorf("parse account %s: %w", acc.Pubkey, er)
+		pk, err := solana.PublicKeyFromBase58(acc.Pubkey)
+		if err != nil {
+			return nil, fmt.Errorf("parse account %s: %w", acc.Pubkey, err)
 		}
 		accounts = append(accounts, solana.NewAccountMeta(pk, acc.IsWritable, acc.IsSigner))
 	}
