@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://api.coingecko.com/api/v3"
+	defaultBaseURL = "https://api.vultisig.com/coingeicko/api/v3"
 
 	// searchCacheTTL controls how long search results are reused.
 	searchCacheTTL = 5 * time.Minute
@@ -20,23 +20,20 @@ const (
 	detailCacheTTL = 10 * time.Minute
 )
 
-// Client wraps the CoinGecko REST API with an in-memory TTL cache.
+// Client wraps the CoinGecko REST API (via Vultisig proxy) with an in-memory TTL cache.
 type Client struct {
 	http    *http.Client
 	baseURL string
-	apiKey  string
 
 	searchCache *ttlCache[[]SearchCoin]
 	detailCache *ttlCache[*CoinDetail]
 }
 
-// NewClient creates a CoinGecko API client. If apiKey is non-empty it is
-// sent as a demo API key header to raise rate limits.
-func NewClient(apiKey string) *Client {
+// NewClient creates a CoinGecko API client that routes through the Vultisig proxy.
+func NewClient() *Client {
 	return &Client{
 		http:        &http.Client{Timeout: 30 * time.Second},
 		baseURL:     defaultBaseURL,
-		apiKey:      apiKey,
 		searchCache: newTTLCache[[]SearchCoin](searchCacheTTL),
 		detailCache: newTTLCache[*CoinDetail](detailCacheTTL),
 	}
@@ -46,9 +43,6 @@ func (c *Client) doGet(ctx context.Context, path string) (*http.Response, error)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
-	}
-	if c.apiKey != "" {
-		req.Header.Set("x-cg-demo-api-key", c.apiKey)
 	}
 	return c.http.Do(req)
 }

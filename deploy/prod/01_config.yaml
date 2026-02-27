@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-config
+data:
+  eth-rpc-url: "https://ethereum-rpc.publicnode.com"
+  blockchair-api-url: "https://api.vultisig.com/blockchair"

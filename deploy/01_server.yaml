@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  labels:
+    app: server
+spec:
+  selector:
+    app: server
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  labels:
+    app: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/vultisig/mcp/mcp-server:latest
+          command: ["/app/main", "-http", ":80"]
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: EVM_ETHEREUM_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mcp-config
+                  key: eth-rpc-url
+            - name: BLOCKCHAIR_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mcp-config
+                  key: blockchair-api-url
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 80
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 80

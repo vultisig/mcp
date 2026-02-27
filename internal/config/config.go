@@ -30,11 +30,10 @@ type RPCItem struct {
 }
 
 type Config struct {
-	EVM             EVMRPCConfig
-	CoinGeckoAPIKey string `envconfig:"COINGECKO_API_KEY"`
-	BlockchairURL   string `envconfig:"BLOCKCHAIR_API_URL" default:"https://api.vultisig.com/blockchair"`
-	ThorchainURL    string `envconfig:"THORCHAIN_URL" default:"https://thornode.ninerealms.com"`
-	SolanaRPCURL    string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
+	EVM           EVMRPCConfig
+	BlockchairURL string `envconfig:"BLOCKCHAIR_API_URL" default:"https://api.vultisig.com/blockchair"`
+	ThorchainURL  string `envconfig:"THORCHAIN_URL" default:"https://thornode.ninerealms.com"`
+	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
 }
 
 // ToURLMap converts the EVM RPC config to a chain-name → URL map,

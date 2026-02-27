@@ -32,7 +32,6 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `EVM_BLAST_URL` | `https://blast-rpc.publicnode.com` | Blast endpoint |
 | `EVM_MANTLE_URL` | `https://mantle-rpc.publicnode.com` | Mantle endpoint |
 | `EVM_ZKSYNC_URL` | `https://mainnet.era.zksync.io` | zkSync Era endpoint |
-| `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
 | `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
@@ -64,8 +63,8 @@ internal/tools/
   search_token.go                # Token discovery via CoinGecko API
   abi_encode.go                  # ABI encode function calls / raw args
   abi_decode.go                  # ABI decode output data
-  convert_amount.go 
-  registry.go 
+  convert_amount.go
+  registry.go
 internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
