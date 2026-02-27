@@ -52,4 +52,4 @@ jobs:
         run: |
           kubectl -n ${{ env.NS }} apply -f deploy/dev
           kubectl -n ${{ env.NS }} apply -f deploy/01_server.yaml
-          kubectl -n ${{ env.NS }} rollout status deployment/server --timeout=300s
+          kubectl -n ${{ env.NS }} rollout status deployment/mcp-server --timeout=300s
