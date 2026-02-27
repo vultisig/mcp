@@ -30,8 +30,6 @@ spec:
       labels:
         app: server
     spec:
-      imagePullSecrets:
-        - name: ghcr
       containers:
         - name: server
           image: ghcr.io/vultisig/mcp/mcp-server:latest
@@ -40,7 +38,7 @@ spec:
             - containerPort: 80
               name: http
           env:
-            - name: ETH_RPC_URL
+            - name: EVM_ETHEREUM_URL
               valueFrom:
                 configMapKeyRef:
                   name: mcp-config
