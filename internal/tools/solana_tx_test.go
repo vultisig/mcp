@@ -12,6 +12,7 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/programs/system"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/mark3labs/mcp-go/mcp"
 
 	solanaclient "github.com/vultisig/mcp/internal/solana"
@@ -23,7 +24,7 @@ import (
 
 func TestBuildSolanaTx_InvalidAmount(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -56,7 +57,7 @@ func TestBuildSolanaTx_InvalidAmount(t *testing.T) {
 
 func TestBuildSolanaTx_InvalidAddress(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -88,7 +89,7 @@ func TestBuildSolanaTx_InvalidAddress(t *testing.T) {
 
 func TestBuildSolanaTx_MissingParams(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -122,7 +123,7 @@ func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 		ChainCode:      testChainCode,
 	})
 
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	req := callToolReq("build_solana_tx", map[string]any{
@@ -169,7 +170,7 @@ func TestBuildSolanaTx_Integration(t *testing.T) {
 	from := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
 	to := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
 
-	client := solanaclient.NewClient("https://api.mainnet-beta.solana.com")
+	client := solanaclient.NewClient(rpc.New("https://api.mainnet-beta.solana.com"))
 
 	txBytes, err := client.BuildNativeTransfer(context.Background(), from, to, 1_000_000)
 	if err != nil {
@@ -335,7 +336,7 @@ func verifySolanaSDKCompat(t *testing.T, txBytes []byte, wantInstructions int) {
 
 func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	req := callToolReq("build_spl_transfer_tx", map[string]any{

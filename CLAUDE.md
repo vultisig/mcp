@@ -35,6 +35,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
 | `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
+| `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 
 ## Architecture
 
@@ -69,6 +70,7 @@ internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
 internal/solana/client.go        # Solana RPC client wrapper
+internal/jupiter/client.go       # Jupiter DEX aggregator API client
 internal/tools/
   get_utxo_balance.go            # Query UTXO chain address balance
   get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
@@ -79,6 +81,7 @@ internal/tools/
   get_spl_token_balance.go       # Query SPL token balance
   build_solana_tx.go             # Build unsigned native SOL transfer
   build_spl_transfer_tx.go       # Build unsigned SPL token transfer
+  build_solana_swap.go           # Build unsigned Solana swap via Jupiter
 ```
 
 ## Key Dependencies

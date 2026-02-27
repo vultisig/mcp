@@ -19,9 +19,9 @@ type Client struct {
 	rpc *rpc.Client
 }
 
-func NewClient(rpcURL string) *Client {
+func NewClient(rpcClient *rpc.Client) *Client {
 	return &Client{
-		rpc: rpc.New(rpcURL),
+		rpc: rpcClient,
 	}
 }
 

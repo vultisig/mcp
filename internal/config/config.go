@@ -34,6 +34,7 @@ type Config struct {
 	BlockchairURL string `envconfig:"BLOCKCHAIR_API_URL" default:"https://api.vultisig.com/blockchair"`
 	ThorchainURL  string `envconfig:"THORCHAIN_URL" default:"https://thornode.ninerealms.com"`
 	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
+	JupiterAPIURL string `envconfig:"JUPITER_API_URL" default:"https://api.jup.ag"`
 }
 
 // ToURLMap converts the EVM RPC config to a chain-name → URL map,
