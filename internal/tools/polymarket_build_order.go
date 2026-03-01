@@ -112,10 +112,10 @@ func handlePolymarketBuildOrder(pmClient *polymarket.Client, store *vault.Store,
 			return mcp.NewToolResultError(fmt.Sprintf("failed to build order: %v", err)), nil
 		}
 
-		// Store result server-side so submit_order can retrieve it by ref
+		// Store result server-side so submit_order can retrieve by ref or address
 		ref := fmt.Sprintf("ord_%d", time.Now().UnixNano())
 		result.OrderRef = ref
-		orderStore.Put(ref, result)
+		orderStore.Put(ref, addr, result)
 
 		data, err := json.Marshal(result)
 		if err != nil {

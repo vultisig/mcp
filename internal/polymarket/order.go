@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -65,8 +66,9 @@ type BuildOrderResult struct {
 	EffectiveCost string         `json:"effective_cost"`
 }
 
-// OrderStore persists build results server-side (10-min TTL) so the LLM
-// only needs to pass an order_ref instead of threading all params.
+// OrderStore persists build results server-side (10-min TTL).
+// Keyed by both order_ref and maker address (lowercase) so submit_order
+// can retrieve by address alone — the LLM doesn't need to thread the ref.
 type OrderStore struct {
 	cache *ttlCache[*BuildOrderResult]
 }
@@ -75,12 +77,17 @@ func NewOrderStore() *OrderStore {
 	return &OrderStore{cache: newTTLCache[*BuildOrderResult](10 * time.Minute)}
 }
 
-func (s *OrderStore) Put(ref string, result *BuildOrderResult) {
+func (s *OrderStore) Put(ref string, makerAddr string, result *BuildOrderResult) {
 	s.cache.set(ref, result)
+	s.cache.set("addr:"+strings.ToLower(makerAddr), result)
 }
 
 func (s *OrderStore) Get(ref string) (*BuildOrderResult, bool) {
 	return s.cache.get(ref)
+}
+
+func (s *OrderStore) GetByAddress(addr string) (*BuildOrderResult, bool) {
+	return s.cache.get("addr:" + strings.ToLower(addr))
 }
 
 // BuildOrder constructs EIP-712 payloads for both the order and L1 auth.

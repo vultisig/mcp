@@ -62,33 +62,37 @@ func handlePolymarketSubmitOrder(pmClient *polymarket.Client, orderStore *polyma
 		var orderParamsStr string
 		var orderType string
 
-		// If order_ref provided, retrieve stored build result
+		// Try to retrieve stored build result: by order_ref first, then by address
+		var stored *polymarket.BuildOrderResult
 		if ref := req.GetString("order_ref", ""); ref != "" {
-			stored, ok := orderStore.Get(ref)
-			if !ok {
-				return mcp.NewToolResultError(fmt.Sprintf("order_ref %q not found or expired (10-min TTL)", ref)), nil
-			}
+			stored, _ = orderStore.Get(ref)
+		}
+		if stored == nil {
+			// Fallback: look up by maker address (always available)
+			stored, _ = orderStore.GetByAddress(address)
+		}
+
+		if stored != nil {
 			if ts, ok := stored.ClobParams["auth_timestamp"].(string); ok {
 				authTS = ts
 			}
 			if ot, ok := stored.ClobParams["order_type"].(string); ok {
 				orderType = ot
 			}
-			// Serialize stored order message as order_params
 			msgBytes, err := json.Marshal(stored.OrderEIP712.Message)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to serialize stored order params: %v", err)), nil
 			}
 			orderParamsStr = string(msgBytes)
 		} else {
-			// Fallback: use LLM-provided values
+			// No stored result — use LLM-provided values
 			authTS = req.GetString("auth_timestamp", "")
 			orderParamsStr = req.GetString("order_params", "")
 			orderType = req.GetString("order_type", "")
 		}
 
 		if authTS == "" || orderParamsStr == "" || orderType == "" {
-			return mcp.NewToolResultError("provide order_ref, or auth_timestamp + order_params + order_type"), nil
+			return mcp.NewToolResultError("no stored order found for this address and no manual params provided. Call polymarket_build_order first."), nil
 		}
 
 		// Parse auth timestamp
