@@ -46,7 +46,7 @@ func handleMayaFeeRate(mcClient *mayachain.Client) server.ToolHandlerFunc {
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return nil, fmt.Errorf("marshal fee rate result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal fee rate result: %v", err)), nil
 		}
 
 		return mcp.NewToolResultText(string(data)), nil

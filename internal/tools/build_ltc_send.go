@@ -44,7 +44,7 @@ func newBuildLTCSendTool() mcp.Tool {
 			mcp.Required(),
 		),
 		mcp.WithString("memo",
-			mcp.Description("Optional OP_RETURN memo (e.g. THORChain swap instruction)"),
+			mcp.Description("Optional OP_RETURN memo (e.g. THORChain swap instruction, max 80 bytes)"),
 		),
 		mcp.WithString("address",
 			mcp.Description("Sender Litecoin address. Falls back to vault-derived address if omitted."),
@@ -69,6 +69,9 @@ func handleBuildLTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 		}
 
 		feeRateFloat := req.GetFloat("fee_rate", 0)
+		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat < 0 || feeRateFloat > float64(math.MaxUint64) {
+			return mcp.NewToolResultError("fee_rate must be a valid positive number"), nil
+		}
 		feeRate := uint64(math.Round(feeRateFloat))
 		if feeRate == 0 {
 			return mcp.NewToolResultError("fee_rate must be greater than 0"), nil
@@ -156,7 +159,7 @@ func handleBuildLTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 		var buf bytes.Buffer
 		err = result.Packet.Serialize(&buf)
 		if err != nil {
-			return nil, fmt.Errorf("serialize PSBT: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("serialize PSBT: %v", err)), nil
 		}
 
 		action := "transfer"

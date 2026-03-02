@@ -146,13 +146,13 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 			totalInput += uint64(u.Value)
 
 			fee := zecEstimateFee(len(inputs), outputs)
-			if totalInput > amount+fee {
+			if totalInput >= amount+fee {
 				outputs[changeIdx].Value = int64(totalInput - amount - fee)
 				break
 			}
 		}
 
-		if totalInput <= amount+zecEstimateFee(len(inputs), outputs) {
+		if totalInput < amount+zecEstimateFee(len(inputs), outputs) {
 			return mcp.NewToolResultError(
 				fmt.Sprintf("insufficient funds: have %d zatoshis, need more than %d", totalInput, amount),
 			), nil

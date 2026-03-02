@@ -79,12 +79,31 @@ func ltcAddrToPkScript(addr string) ([]byte, error) {
 		if len(data) < 2 {
 			return nil, fmt.Errorf("LTC bech32 address too short: %q", addr)
 		}
+		witnessVersion := data[0]
+		if witnessVersion > 16 {
+			return nil, fmt.Errorf("invalid LTC witness version %d: %q", witnessVersion, addr)
+		}
 		witnessProgram, err := bech32.ConvertBits(data[1:], 5, 8, false)
 		if err != nil {
 			return nil, fmt.Errorf("decode LTC bech32 bits %q: %w", addr, err)
 		}
+		if witnessVersion == 0 {
+			if len(witnessProgram) != 20 && len(witnessProgram) != 32 {
+				return nil, fmt.Errorf("invalid LTC v0 witness program length %d: %q", len(witnessProgram), addr)
+			}
+		} else {
+			if len(witnessProgram) < 2 || len(witnessProgram) > 40 {
+				return nil, fmt.Errorf("invalid LTC witness program length %d: %q", len(witnessProgram), addr)
+			}
+		}
+		var witnessOp byte
+		if witnessVersion == 0 {
+			witnessOp = txscript.OP_0
+		} else {
+			witnessOp = txscript.OP_1 - 1 + witnessVersion
+		}
 		builder := txscript.NewScriptBuilder()
-		builder.AddOp(txscript.OP_0)
+		builder.AddOp(witnessOp)
 		builder.AddData(witnessProgram)
 		return builder.Script()
 	}

@@ -189,7 +189,7 @@ Build an unsigned Bitcoin PSBT for a send or swap. Automatically selects UTXOs, 
 | `to_address` | Yes | Recipient Bitcoin address (or THORChain vault address for swaps) |
 | `amount` | Yes | Amount to send in satoshis (decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `btc_fee_rate` tool to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction, max 80 bytes) |
 | `address` | No | Sender Bitcoin address. Falls back to vault-derived if omitted. |
 
 ---
@@ -209,7 +209,7 @@ Build an unsigned Litecoin PSBT for a send or swap. Requires `set_vault_info` fi
 | `to_address` | Yes | Recipient Litecoin address |
 | `amount` | Yes | Amount to send in litoshis (decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `ltc_fee_rate` to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction, max 80 bytes) |
 | `address` | No | Sender Litecoin address. Falls back to vault-derived if omitted. |
 
 ---
@@ -229,7 +229,7 @@ Build an unsigned Dogecoin PSBT for a send or swap. Requires `set_vault_info` fi
 | `to_address` | Yes | Recipient Dogecoin address |
 | `amount` | Yes | Amount to send in koinus (1 DOGE = 100,000,000 koinus, decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `doge_fee_rate` to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction, max 80 bytes) |
 | `address` | No | Sender Dogecoin address. Falls back to vault-derived if omitted. |
 
 ---
@@ -249,7 +249,7 @@ Build an unsigned Bitcoin Cash PSBT for a send or swap. Requires `set_vault_info
 | `to_address` | Yes | Recipient Bitcoin Cash address (CashAddr or legacy format) |
 | `amount` | Yes | Amount to send in satoshis (decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `bch_fee_rate` to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction, max 80 bytes) |
 | `address` | No | Sender Bitcoin Cash address. Falls back to vault-derived if omitted. |
 
 ---
@@ -269,7 +269,7 @@ Build an unsigned Dash PSBT for a send or swap. Requires `set_vault_info` first.
 | `to_address` | Yes | Recipient Dash address |
 | `amount` | Yes | Amount to send in duffs (1 DASH = 100,000,000 duffs, decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `dash_fee_rate` to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. MayaChain swap instruction) |
+| `memo` | No | OP_RETURN memo (e.g. MayaChain swap instruction, max 80 bytes) |
 | `address` | No | Sender Dash address. Falls back to vault-derived if omitted. |
 
 ---

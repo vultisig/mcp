@@ -81,7 +81,7 @@ func handleABIEncode() server.ToolHandlerFunc {
 		resp := map[string]string{"encoded": "0x" + hex.EncodeToString(result)}
 		data, err := json.Marshal(resp)
 		if err != nil {
-			return nil, fmt.Errorf("marshal abi_encode result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal abi_encode result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

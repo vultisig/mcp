@@ -126,7 +126,7 @@ func handleBuildSwapTx(svc *swap.Service) server.ToolHandlerFunc {
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return nil, fmt.Errorf("marshal swap result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal swap result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}
