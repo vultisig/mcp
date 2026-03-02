@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"time"
 )
 
@@ -93,8 +94,38 @@ func (c *Client) SearchEvents(ctx context.Context, query string, activeOnly bool
 	return events, nil
 }
 
+// slugYearPrefix matches slugs like "2028-some-topic".
+var slugYearPrefix = regexp.MustCompile(`^(\d{4})-(.+)$`)
+
+// slugYearSuffix matches slugs like "some-topic-2028".
+var slugYearSuffix = regexp.MustCompile(`^(.+)-(\d{4})$`)
+
 // GetEvent fetches a single event by slug via query param.
+// If the exact slug isn't found, tries swapping year position
+// (e.g. "2028-republican-nominee" → "republican-nominee-2028").
 func (c *Client) GetEvent(ctx context.Context, slug string) (*Event, error) {
+	event, err := c.getEventBySlug(ctx, slug)
+	if err == nil {
+		return event, nil
+	}
+
+	// Try swapping year position before giving up
+	alt := ""
+	if m := slugYearPrefix.FindStringSubmatch(slug); m != nil {
+		alt = m[2] + "-" + m[1] // "2028-topic" → "topic-2028"
+	} else if m := slugYearSuffix.FindStringSubmatch(slug); m != nil {
+		alt = m[2] + "-" + m[1] // "topic-2028" → "2028-topic"
+	}
+	if alt != "" {
+		if event, altErr := c.getEventBySlug(ctx, alt); altErr == nil {
+			return event, nil
+		}
+	}
+
+	return nil, err
+}
+
+func (c *Client) getEventBySlug(ctx context.Context, slug string) (*Event, error) {
 	params := url.Values{}
 	params.Set("slug", slug)
 	body, err := c.doGet(ctx, c.gammaURL, "/events?"+params.Encode())

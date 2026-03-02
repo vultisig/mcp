@@ -189,3 +189,31 @@ func (c *Client) LatestBaseFee(ctx context.Context) (*big.Int, error) {
 func (c *Client) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	return c.eth.EstimateGas(ctx, msg)
 }
+
+// IsApprovedForAll checks ERC-1155 isApprovedForAll(owner, operator).
+func (c *Client) IsApprovedForAll(ctx context.Context, contractAddr, ownerAddr, operatorAddr string) (bool, error) {
+	contract := ethcommon.HexToAddress(contractAddr)
+	owner := ethcommon.HexToAddress(ownerAddr)
+	operator := ethcommon.HexToAddress(operatorAddr)
+
+	// isApprovedForAll(address,address) selector = 0xe985e9c5
+	data := make([]byte, 4+32+32)
+	data[0] = 0xe9
+	data[1] = 0x85
+	data[2] = 0xe9
+	data[3] = 0xc5
+	copy(data[4+12:4+32], owner.Bytes())
+	copy(data[4+32+12:4+64], operator.Bytes())
+
+	result, err := c.eth.CallContract(ctx, ethereum.CallMsg{
+		To:   &contract,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return false, fmt.Errorf("call isApprovedForAll(): %w", err)
+	}
+	if len(result) < 32 {
+		return false, fmt.Errorf("unexpected isApprovedForAll result length: %d", len(result))
+	}
+	return new(big.Int).SetBytes(result).Sign() != 0, nil
+}

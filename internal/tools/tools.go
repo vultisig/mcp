@@ -12,8 +12,8 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
-	"github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/protocols"
+	pmtools "github.com/vultisig/mcp/internal/tools/polymarket"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/vault"
@@ -55,18 +55,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient))
 
 	// Polymarket prediction market tools
-	pmClient := polymarket.NewClient()
-	orderStore := polymarket.NewOrderStore()
-	s.AddTool(newPolymarketSearchTool(), handlePolymarketSearch(pmClient))
-	s.AddTool(newPolymarketMarketInfoTool(), handlePolymarketMarketInfo(pmClient))
-	s.AddTool(newPolymarketOrderbookTool(), handlePolymarketOrderbook(pmClient))
-	s.AddTool(newPolymarketPriceTool(), handlePolymarketPrice(pmClient))
-	s.AddTool(newPolymarketPositionsTool(), handlePolymarketPositions(pmClient, store))
-	s.AddTool(newPolymarketTradesTool(), handlePolymarketTrades(pmClient, store))
-	s.AddTool(newPolymarketBuildOrderTool(), handlePolymarketBuildOrder(pmClient, store, orderStore))
-	s.AddTool(newPolymarketSubmitOrderTool(), handlePolymarketSubmitOrder(pmClient, orderStore))
-	s.AddTool(newPolymarketCancelOrderTool(), handlePolymarketCancelOrder(pmClient))
-	s.AddTool(newPolymarketOpenOrdersTool(), handlePolymarketOpenOrders(pmClient))
+	pmtools.RegisterAll(s, store, pool)
 
 	err := protocols.RegisterAll(s, store, pool)
 	if err != nil {

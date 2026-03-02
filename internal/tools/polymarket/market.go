@@ -1,4 +1,4 @@
-package tools
+package polymarket
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/polymarket"
+	pm "github.com/vultisig/mcp/internal/polymarket"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 	defaultMarketsPageSize = 10
 )
 
-func newPolymarketMarketInfoTool() mcp.Tool {
+func NewMarketInfoTool() mcp.Tool {
 	return mcp.NewTool("polymarket_market_info",
 		mcp.WithDescription(
 			"Get detailed information about a specific Polymarket event or market. "+
@@ -53,13 +53,13 @@ func truncateDescription(s string) string {
 }
 
 type eventInfoResponse struct {
-	polymarket.Event
+	pm.Event
 	TotalMarkets int `json:"total_markets"`
 	Offset       int `json:"offset"`
 	Showing      int `json:"showing"`
 }
 
-func handlePolymarketMarketInfo(pmClient *polymarket.Client) server.ToolHandlerFunc {
+func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		slug := req.GetString("slug", "")
 		marketID := req.GetString("market_id", "")
@@ -75,7 +75,6 @@ func handlePolymarketMarketInfo(pmClient *polymarket.Client) server.ToolHandlerF
 			}
 			event.Description = truncateDescription(event.Description)
 
-			// Filter non-tradable markets (before pagination)
 			tradable := event.Markets[:0]
 			for _, m := range event.Markets {
 				if m.Closed || !m.Active {
@@ -91,7 +90,6 @@ func handlePolymarketMarketInfo(pmClient *polymarket.Client) server.ToolHandlerF
 			}
 			event.Markets = tradable
 
-			// Filter by question text (before pagination)
 			if qFilter := req.GetString("question_contains", ""); qFilter != "" {
 				qLower := strings.ToLower(qFilter)
 				filtered := event.Markets[:0]

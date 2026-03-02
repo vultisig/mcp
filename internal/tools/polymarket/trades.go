@@ -1,4 +1,4 @@
-package tools
+package polymarket
 
 import (
 	"context"
@@ -9,12 +9,12 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/polymarket"
+	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func newPolymarketTradesTool() mcp.Tool {
+func NewTradesTool() mcp.Tool {
 	return mcp.NewTool("polymarket_trades",
 		mcp.WithDescription(
 			"Get recent trade history for an address on Polymarket. "+
@@ -30,7 +30,7 @@ func newPolymarketTradesTool() mcp.Tool {
 	)
 }
 
-func handlePolymarketTrades(pmClient *polymarket.Client, store *vault.Store) server.ToolHandlerFunc {
+func HandleTrades(pmClient *pm.Client, store *vault.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 		if explicit != "" && !common.IsHexAddress(explicit) {

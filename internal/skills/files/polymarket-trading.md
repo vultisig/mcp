@@ -6,7 +6,13 @@ tags: [polymarket, prediction-market, polygon, evm, trading, betting]
 
 # Polymarket Trading
 
-Trade prediction markets on Polymarket — a hybrid-decentralized platform on Polygon (Chain ID 137). Markets resolve to $1 (correct) or $0 (incorrect). Collateral is USDC.e.
+Trade prediction markets on Polymarket — a hybrid-decentralized platform on Polygon (Chain ID 137). Markets resolve to $1 (correct) or $0 (incorrect).
+
+**IMPORTANT: Polymarket uses USDC.e (bridged USDC) as collateral — NOT native USDC.**
+- USDC.e contract: `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- When user says "$3", "3 USDC", "3 dollars" — this means 3 USDC.e on Polygon
+- To check balance: use `evm_get_token_balance` with chain=Polygon and contract_address=`0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`
+- The `polymarket_place_bet` result includes `usdc_e_balance` — always tell the user their balance
 
 ## Contracts (Polygon)
 
@@ -14,85 +20,57 @@ Trade prediction markets on Polymarket — a hybrid-decentralized platform on Po
 |----------|---------|
 | CTF Exchange | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` |
 | Neg Risk CTF Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` |
+| Neg Risk Adapter | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` |
 | Conditional Tokens (ERC1155) | `0x4D97DCd97eC945f40cF65F87097ACe5EA0476045` |
 | USDC.e | `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174` |
 
-## Authentication
+## Critical Agent Rules
 
-Polymarket requires an EIP-712 "ClobAuth" signature to authenticate with the CLOB API. Derived API credentials do NOT expire (only the per-request HMAC timestamp has a 30-second window).
+1. **ONE action per response.** Emit exactly ONE `build_custom_tx` or `polymarket_sign_bet` per response. Never batch multiple actions.
+2. **spend vs amount.** When the user says "$X", "X dollars", or "bet X", use the `spend` parameter (dollars). Only use `amount` when the user explicitly says "X shares". The server calculates shares = spend / price.
+3. **Don't re-check approvals.** After `polymarket_check_approvals` returns `all_approved: true`, do NOT call it again during this session.
+4. **Approval flow.** For each `missing_actions` entry: emit `build_custom_tx` in one response, wait for the `sign_tx` response, then emit the next. One at a time.
+5. **No fabricated slugs.** NEVER guess `event_slug`. Always use `polymarket_search` first to get valid slugs.
+6. **No "Yes" on multi-outcome.** For multi-outcome events, always specify the exact outcome name (e.g. "Oklahoma City Thunder"), never "Yes".
+7. **Do NOT ask unnecessary questions.** If the user's intent is clear ("bet $2 on Thunder"), execute the workflow. Don't ask "are you sure?" when the context is unambiguous.
 
-When the user first mentions Polymarket in a conversation (any intent — betting, positions, orders, markets):
-1. Generate the ClobAuth EIP-712 payload:
-   - primaryType: "ClobAuth"
-   - domain: { name: "ClobAuthDomain", version: "1", chainId: 137 }
-   - types: { ClobAuth: [{ name: "address", type: "address" }, { name: "timestamp", type: "string" }, { name: "nonce", type: "uint256" }, { name: "message", type: "string" }] }
-   - message: { address: <user's Polygon address>, timestamp: <current unix seconds as string>, nonce: 0, message: "This message attests that I control the given wallet" }
-2. Emit sign_typed_data with this single payload (id: "polymarket_auth", chain: "Polygon")
-3. After the user signs, CACHE the auth_signature and auth_timestamp — reuse them for ALL subsequent Polymarket calls in this conversation (open_orders, cancel_order, submit_order)
-4. Do NOT generate a new auth payload for every order — reuse the cached one
+## MANDATORY WORKFLOW — ALWAYS follow this order
 
-Before the user's first order in a conversation:
-1. Check USDC.e allowance via evm_check_allowance (token: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174, spender: exchange contract)
-   - Regular markets: spender = 0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E (CTF Exchange)
-   - negRisk markets (3+ outcomes): spender = 0xC5d563A36AE78145C45a50134d48A1215220f80a (Neg Risk CTF Exchange)
-2. If allowance is insufficient for the order amount, prompt the user: "Polymarket needs approval to spend your USDC.e. Approve unlimited spending? (one-time setup)"
-3. On confirmation, emit build_custom_tx with tx_type: "evm_contract", chain: "Polygon", contract: 0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174, function: "approve", params: [{type:"address", value:"<exchange_address>"}, {type:"uint256", value:"115792089237316195423570985008687907853269984665640564039457584007913129639935"}]
-4. After approval tx is signed and confirmed, proceed with the original order
+**STEP 1: SEARCH** -> `polymarket_search` (REQUIRED before any bet)
+**STEP 2: CHECK BALANCE + APPROVALS** -> `polymarket_check_approvals` (returns USDC.e balance + missing approval actions). **ALWAYS tell the user their USDC.e balance.** If balance < bet amount, tell the user and stop.
+**STEP 3: FIX APPROVALS** -> if `missing_count > 0`, emit each `missing_actions` entry as `build_custom_tx` -> `sign_tx`. One at a time.
+**STEP 4: PLACE BET** -> `polymarket_place_bet` with `event_slug` + `outcome` + `side` + `price` + `spend` FROM search results
+**STEP 5: SHOW SUMMARY** -> display the summary from place_bet result
+**STEP 6: SIGN** -> emit `polymarket_sign_bet` action with `order_ref` from place_bet result
+**STEP 7: REPORT** -> after signing succeeds, the order is auto-submitted. Report the result from the action result message.
 
-## Betting Shorthand
+**NEVER skip Steps 1 or 2.** The event_slug MUST come from search results. Balance MUST be checked before placing any bet.
 
-When the user says "bet" on a Polymarket outcome (e.g. "bet $3 on Kevin Warsh"):
-1. Look up the market via polymarket_search + polymarket_market_info
-2. Get the current best ask via polymarket_price (use buy_price)
-3. Show the user: "[outcome] is trading at $[buy_price]. Buying [shares] shares costs ~$[total] (incl. ~$[fee] fee). Confirm?"
-4. On confirmation → polymarket_build_order with FOK order type at buy_price
-5. Then sign_typed_data → polymarket_submit_order (standard flow)
+## Placing a Bet
 
-"Bet $X" means the user wants to spend $X total. Calculate shares = X / buy_price.
+1. Call `polymarket_search` — get event_slug (**MANDATORY first step**)
+2. Call `polymarket_check_approvals` — if `missing_count > 0`, emit each `missing_actions` as `build_custom_tx` -> wait for `sign_tx` response. **One per response.**
+3. Call `polymarket_place_bet` — pass `event_slug`, `outcome`, `side`, `price`, `spend` (or `amount`)
+4. Show the user the `summary` from the result
+5. Emit `polymarket_sign_bet` action with `order_ref` from the result
+6. After signing succeeds, the order is auto-submitted. Report the result from the action result message.
 
-## Discovery Flow
+### Key rules for placing bets
 
-1. `polymarket_search` — find markets by topic (e.g. "Trump", "Bitcoin", "Fed rate")
-2. `polymarket_market_info` — get details: outcomes, CLOB token IDs, neg_risk flag
-   - Only active, tradable markets are returned (closed/inactive/zero-liquidity filtered out)
-   - For large events (many sub-markets), use `question_contains` to filter by text instead of paginating
-   - Example: `polymarket_market_info(slug: "presidential-election-2028", question_contains: "Vance")` → returns only matching markets in one call
-3. `polymarket_price` — check current probability/price for each outcome
-4. `polymarket_orderbook` — check available liquidity at each price level
+- **NEVER** call `polymarket_build_order` or `polymarket_submit_order` directly — use `polymarket_place_bet` instead
+- **NEVER** construct `sign_typed_data` actions for Polymarket — use `polymarket_sign_bet`
+- The `order_ref` comes from `polymarket_place_bet` result — copy it verbatim into `polymarket_sign_bet` params
+- After signing succeeds, the submission result is included in the action result — just report it
+- "Bet $X" means the user wants to SPEND $X total. Use `spend: "X"` — the server calculates shares automatically.
 
-## Token ID Selection (CRITICAL)
+### Betting shorthand
 
-Multi-outcome (negRisk) events have multiple markets, each with different clobTokenIds.
-When placing an order:
-1. Call polymarket_market_info to get the full event with ALL markets listed
-2. BEFORE selecting a token ID, LIST every market's "question" and "outcomes" from the API response in your reasoning
-3. Match the user's chosen outcome to the correct market question — it must be an EXACT match to an outcome string returned by the API
-4. Use the EXACT clobTokenIds from that matched market (index 0 = first outcome, index 1 = second outcome)
-5. NEVER reference, suggest, or use an outcome that does not appear in the API response — if the user names someone/something not in the outcomes list, tell them it's not available on this market
-6. NEVER reuse token IDs from a different market within the same event
-7. If unsure which market matches, show the user the available outcomes and ask them to pick
-
-## Order Placement Flow
-
-### Pre-trade checklist (ALWAYS follow before placing any order)
-
-1. Check USDC.e balance on Polygon: `evm_get_token_balance` with contract `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174` on chain `Polygon`
-   - Show the Polygon USDC.e balance, NOT Ethereum USDC
-   - If the user has USDC on Ethereum but not Polygon, tell them: "You have [X] USDC on Ethereum but Polymarket uses USDC.e on Polygon. You'd need to bridge first."
-   - For order cost calculations, compare against Polygon USDC.e balance only
-2. Check USDC.e allowance for CTF Exchange: `evm_check_allowance` with token `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174`, spender = exchange contract (see neg_risk below), chain `Polygon`
-3. If allowance insufficient → approve flow (see Approval section below)
-4. For FOK/FAK orders: check orderbook liquidity at desired price
-5. Calculate and show fee estimate + effective cost (see Fees section)
-6. Confirm with user before proceeding to sign
-
-### Placing an order
-
-1. `polymarket_build_order` — returns two EIP-712 payloads + an `order_ref` (server-side reference)
-2. `sign_typed_data` action — client signs BOTH payloads (`order_eip712` and `auth_eip712`), returns both signatures
-3. `polymarket_submit_order` — pass `order_ref` + both signatures + address. The server retrieves auth_timestamp, order_params, and order_type from the stored build result (no manual data threading needed)
-
-**IMPORTANT:** Always pass `order_ref` to submit_order. This prevents data corruption (stale timestamps, wrong types) that causes 401 errors.
+When the user says "bet $3 on Marco Rubio":
+1. `polymarket_search` — find the market
+2. `polymarket_check_approvals` — fix any missing approvals
+3. `polymarket_place_bet` with `spend: "3"` — get summary + order_ref
+4. Show summary, emit `polymarket_sign_bet` with order_ref
+5. User signs -> auto-submitted -> report result
 
 ### Order types
 
@@ -100,39 +78,64 @@ When placing an order:
 |------|----------|----------|
 | GTC (Good-Til-Cancelled) | Rests on the book at exact price. No slippage. | Default. "Buy at this price." |
 | GTD (Good-Til-Date) | Like GTC but expires at a specific time. | "Buy at this price, but cancel if not filled by Friday." |
-| FOK (Fill-Or-Kill) | Must fill entirely at `price` or better, or cancels. Market order. | "Buy now at market price." Warn about slippage. |
+| FOK (Fill-Or-Kill) | Must fill entirely at `price` or better, or cancels. | "Buy now at market price." Warn about slippage. |
 | FAK (Fill-And-Kill) | Fills what's available at `price` or better. Partial fill OK. | "Buy what you can right now." Warn about partial fills. |
-
-### Order Confirmation (CRITICAL — two-step signing)
-
-When you have built an order via polymarket_build_order, do NOT emit sign_typed_data in the same response. Instead:
-1. Respond with order summary: "Buy [shares] shares of [outcome] at $[price]. Cost: $[amount] + $[fee] fee = $[total]. Confirm?"
-2. Store the EIP-712 payloads from build_order — you will need them after confirmation.
-3. When user confirms (yes, confirm, do it, go) → THEN emit sign_typed_data with the stored payloads.
-4. After signing succeeds → immediately call polymarket_submit_order with the signatures.
-
-NEVER bundle sign_typed_data with the order summary text. The user must see what they're signing before the password prompt appears.
 
 ### After order placement
 
-Handle status responses:
-- `matched` → "Order filled! You now hold X shares."
-- `live` → "Order placed on the book. I'll monitor it."
-- `delayed` → "Order is being processed. Checking again..."
-- `unmatched` → "Order couldn't be placed. [reason]. Want to try a different price?"
+Handle status responses from the auto-submission result:
+- `matched` -> "Order filled! You now hold X shares."
+- `live` -> "Limit order placed on the book."
+- `delayed` -> "Order is being processed."
+- `unmatched` -> "Order couldn't be placed. [reason]. Want to try a different price?"
+
+## Discovery Flow
+
+1. `polymarket_search` — **ALWAYS call this first.** Find markets by topic (e.g. "Trump", "Bitcoin", "Fed rate")
+   - Returns tradeable markets only (closed/inactive/zero-liquidity filtered out)
+   - Returns event slugs, prices, and outcomes — everything needed for `polymarket_place_bet`
+   - Use `question_contains` to find specific outcomes in large events
+   - **This is the primary discovery tool.**
+2. `polymarket_market_info` — ONLY needed for browsing a specific event's full list of sub-markets
+   - Supports `question_contains` filter and pagination (`offset`, `limit`)
+3. `polymarket_price` — check current probability/price (optional — search already returns prices)
+4. `polymarket_orderbook` — check available liquidity at each price level
+
+### CRITICAL: Do NOT re-fetch data you already have
+
+After search returns event slugs, prices, and outcomes:
+- Do NOT call market_info again for the same market
+- Do NOT call search again with the same query
+- Do NOT re-check approvals if `polymarket_check_approvals` already returned `all_approved: true` this conversation (but balance was already reported)
+- Go straight to `polymarket_place_bet`
+
+## Token ID Selection (Server-Side Resolution)
+
+**ALWAYS use `event_slug` + `outcome` parameters on `polymarket_place_bet`.**
+
+The `event_slug` MUST come from `polymarket_search` results. NEVER fabricate, guess, or recall slugs from memory.
+
+The server resolves the correct CLOB token ID automatically:
+- For multi-outcome events: pass the candidate/option name as `outcome` (e.g., "Marco Rubio")
+- For binary markets: pass "Yes" or "No" as `outcome`
+
+**NEVER manually select or pass CLOB token IDs.** Use the event slug + outcome.
 
 ## Selling Flow
 
-Same as buying but with `side: SELL`. The user must already hold outcome tokens for that market.
+Same as buying but with `side: SELL`. The user must already hold outcome tokens.
 
 1. Check position: `polymarket_positions`
-2. Build sell order: `polymarket_build_order` with `side: SELL`
-3. Sign + submit: same flow as buying
+2. Place sell: `polymarket_place_bet` with `side: SELL`
+3. Show summary, emit `polymarket_sign_bet`
+4. Auto-submitted after signing
 
 ## Managing Orders
 
-- `polymarket_open_orders` — list active orders (requires auth signature)
-- `polymarket_cancel_order` — cancel a specific order by ID (requires auth signature)
+- `polymarket_open_orders` — list active orders. Only pass `address` — auth credentials are cached.
+- `polymarket_cancel_order` — cancel a specific order by ID. Only pass `order_id` + `address`.
+
+**DO NOT** pass fabricated `auth_signature` or `auth_timestamp` to these tools. Just pass `address` and let the server use cached credentials.
 
 ## Positions & History
 
@@ -150,21 +153,38 @@ When showing Polymarket positions, ALWAYS display:
 
 Format as a clean summary, not raw JSON.
 
-## USDC.e Approval (One-time per exchange)
+## Approvals (One-time setup)
 
-Before placing the first order, USDC.e must be approved for the correct exchange contract.
+Polymarket requires USDC.e approvals for MULTIPLE contracts. Missing any one causes "not enough balance / allowance" errors.
 
-For non-negRisk markets → approve for CTF Exchange `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E`
-For negRisk markets → approve for Neg Risk CTF Exchange `0xC5d563A36AE78145C45a50134d48A1215220f80a`
+### Required USDC.e approvals (approve on USDC.e contract, spender = each address below)
 
-Use `build_custom_tx`:
-- tx_type: `evm_contract`
-- chain: `Polygon`
-- contract_address: `0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174` (USDC.e)
-- function_name: `approve`
-- params: `[{type: "address", value: "<exchange_address>"}, {type: "uint256", value: "115792089237316195423570985008687907853269984665640564039457584007913129639935"}]`
+| # | Spender | Address | When needed |
+|---|---------|---------|-------------|
+| 1 | CTF Exchange | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` | All markets |
+| 2 | Neg Risk CTF Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` | negRisk markets (3+ outcomes) |
+| 3 | Neg Risk Adapter | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` | negRisk markets (3+ outcomes) |
 
-Then `sign_tx` to execute the approval.
+**WARNING:** The spender is NEVER the Conditional Tokens contract (`0x4D97...`).
+
+### Required Conditional Tokens approvals (setApprovalForAll on CT contract, operator = each address)
+
+| # | Operator | Address | When needed |
+|---|----------|---------|-------------|
+| 1 | CTF Exchange | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` | Selling on any market |
+| 2 | Neg Risk CTF Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` | Selling on negRisk markets |
+| 3 | Neg Risk Adapter | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` | Selling on negRisk markets |
+
+### Checking and fixing approvals
+
+**Use `polymarket_check_approvals`** — ONE call checks all 6 approvals + USDC.e balance.
+
+Response:
+- `all_approved: true` -> skip straight to placing bet
+- `missing_count: N` + `missing_actions: [...]` -> chain each action as `build_custom_tx` -> `sign_tx`
+- `instruction` -> follow it exactly
+
+**IMPORTANT:** Do NOT modify `missing_actions` params. Do NOT ask the user for approval. Just emit each action exactly as returned, one after another. Approvals persist across sessions.
 
 ## Redeeming Positions (After Market Resolution)
 
@@ -183,45 +203,52 @@ Then `sign_tx` to execute redemption.
 
 Fee formula: `fee = feeRateBps / 10000 * min(price, 1 - price) * size`
 
-- Base rate is ~200 bps (2%) but varies per market — `polymarket_build_order` fetches it dynamically
+- Base rate is ~200 bps (2%) but varies per market — `polymarket_place_bet` fetches it dynamically
 - Always show estimated fee + total effective cost before placing order
 - Example: "100 shares at $0.65 = $65.00 + $0.70 fee = $65.70 total"
+- **Minimum order: $1** — orders with total cost under $1 are rejected.
 
 ## NegRisk Markets
 
-Markets with 3+ outcomes (e.g. "Who will win the election?") use the Neg Risk CTF Exchange at `0xC5d563A36AE78145C45a50134d48A1215220f80a`. The `neg_risk` flag on market info indicates this. `polymarket_build_order` auto-detects and uses the correct exchange contract.
+Markets with 3+ outcomes use the Neg Risk CTF Exchange. `polymarket_place_bet` auto-detects and uses the correct exchange contract.
 
 Key differences:
 - Different exchange contract address
 - Different EIP-712 domain (verifyingContract changes)
-- USDC.e approval must be for the Neg Risk exchange
-
-## Scheduling
-
-After placing a bet, suggest monitoring:
-
-> "Want me to monitor this position? I'll check every 6 hours and alert you if the market resolves, price moves >10%, or it's closing within 24h."
-
-Use `schedule_task` with:
-- intent: "Check Polymarket position for [market_name]. Alert if resolved, price moved >10% from [entry_price], or market closing within 24h."
-- context: `{ market_slug, condition_id, token_id, entry_price, user_address, outcome }`
-- interval_seconds: 21600 (6 hours)
+- **USDC.e approval required for THREE contracts**: NegRisk CTF Exchange, NegRisk Adapter, AND CTF Exchange
+- Missing the NegRisk Adapter approval causes "not enough balance / allowance" errors
 
 ## Error Recovery
 
 | Error | Resolution |
 |-------|-----------|
 | Insufficient USDC.e | "You need X more USDC.e on Polygon. Want to swap?" |
+| not enough balance / allowance | 1. Verify USDC.e balance. 2. Check allowance for the CORRECT exchange contract. 3. Cancel stale orders with `polymarket_open_orders` then `polymarket_cancel_order`. |
 | Market closed | "This market has closed and can no longer be traded." |
-| Below minimum | "Minimum order is X. Want to increase?" |
-| Invalid tick size | Auto-rounded in `polymarket_build_order` |
-| CLOB unavailable | "The Polymarket order book is temporarily unavailable. Try again shortly." |
+| Below minimum / $1 | "Minimum order is $1. Increase spend to meet the minimum." |
+| Token resolution failed | Outcome not found. Check available outcomes with `polymarket_search`. |
+| "pass the candidate NAME, not Yes" | Multi-outcome event — pass the person/option name, NOT "Yes"/"No". |
+| place_bet failed | Check error message. Usually token resolution or balance issue. Re-search and retry. |
 
 ## DO NOTs
 
+- **DO NOT** call `polymarket_build_order` or `polymarket_submit_order` directly — use `polymarket_place_bet` instead
+- **DO NOT** construct `sign_typed_data` actions for Polymarket — use `polymarket_sign_bet`
+- **DO NOT** call `polymarket_place_bet` without calling `polymarket_search` first — event_slug MUST come from search results
+- **DO NOT** fabricate, guess, or recall event_slugs from memory — they MUST come from `polymarket_search`
+- **DO NOT** fabricate or guess CLOB token IDs — use `event_slug` + `outcome` on place_bet
 - **DO NOT** place orders without checking USDC.e balance and allowance first
+- **DO NOT** approve the wrong contract — the spender is the EXCHANGE, NEVER the Conditional Tokens contract
+- **DO NOT** use `abi_encode`, `evm_check_allowance`, or `evm_tx_info` for approvals — use `polymarket_check_approvals`
 - **DO NOT** use FOK/FAK without warning the user about slippage/partial fills
 - **DO NOT** place orders on closed markets
 - **DO NOT** skip fee disclosure — always show estimated fee + effective cost
 - **DO NOT** guess contract addresses — use the addresses in this skill
 - **DO NOT** use `search_token` for Polymarket tokens — they are not on CoinGecko
+- **DO NOT** pass "Yes" or "No" as the outcome for multi-outcome events — pass the candidate/option name
+- **DO NOT** use `amount` when the user says "$X" or "X dollars" — use `spend` instead
+- **DO NOT** batch multiple actions in one response — the backend strips all but the first
+- **DO NOT** re-check approvals after they return `all_approved: true`
+- **DO NOT** stop to ask clarifying questions when the user's intent is unambiguous
+- **DO NOT** fabricate `order_ref` values — copy the EXACT `order_ref` from `polymarket_place_bet` response
+- **DO NOT** ask "Which team?" or "Ready to sign?" when the user already specified what they want

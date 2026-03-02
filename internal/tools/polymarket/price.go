@@ -1,4 +1,4 @@
-package tools
+package polymarket
 
 import (
 	"context"
@@ -8,24 +8,25 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/polymarket"
+	pm "github.com/vultisig/mcp/internal/polymarket"
 )
 
-func newPolymarketPriceTool() mcp.Tool {
+func NewPriceTool() mcp.Tool {
 	return mcp.NewTool("polymarket_price",
 		mcp.WithDescription(
 			"Get the current price and midpoint for a Polymarket outcome token. "+
 				"Price represents the probability of the outcome (e.g. 0.65 = 65% chance). "+
-				"Use the CLOB token ID from polymarket_market_info.",
+				"Use the CLOB token ID from polymarket_search or polymarket_market_info results. "+
+				"Note: polymarket_search already returns outcome_prices — only call this if you need a fresh quote.",
 		),
 		mcp.WithString("token_id",
-			mcp.Description("CLOB token ID for the outcome (from polymarket_market_info clobTokenIds)."),
+			mcp.Description("CLOB token ID for the outcome (from polymarket_search or polymarket_market_info results — never fabricate)."),
 			mcp.Required(),
 		),
 	)
 }
 
-func handlePolymarketPrice(pmClient *polymarket.Client) server.ToolHandlerFunc {
+func HandlePrice(pmClient *pm.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		tokenID, err := req.RequireString("token_id")
 		if err != nil {

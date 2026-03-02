@@ -62,17 +62,21 @@ func (s *StringifiedJSON) UnmarshalJSON(data []byte) error {
 }
 
 // Position represents a user's position in a market.
+// Note: The Polymarket data-api returns numeric fields as JSON numbers, not strings.
 type Position struct {
-	Asset        string `json:"asset"`
-	ConditionID  string `json:"conditionId"`
-	Market       string `json:"market"`
-	Outcome      string `json:"outcome"`
-	Size         string `json:"size"`
-	AvgPrice     string `json:"avgPrice"`
-	CurPrice     string `json:"curPrice"`
-	RealizedPnl  string `json:"realizedPnl"`
-	CurrentValue string `json:"currentValue"`
-	PnlPercent   string `json:"pnlPercent"`
+	Asset        string      `json:"asset"`
+	ConditionID  string      `json:"conditionId"`
+	Market       string      `json:"market"`
+	Outcome      string      `json:"outcome"`
+	Size         json.Number `json:"size"`
+	AvgPrice     json.Number `json:"avgPrice"`
+	CurPrice     json.Number `json:"curPrice"`
+	RealizedPnl  json.Number `json:"realizedPnl"`
+	CurrentValue json.Number `json:"currentValue"`
+	PnlPercent   json.Number `json:"pnlPercent"`
+	// Additional fields from data-api
+	Title     string `json:"title"`
+	EventSlug string `json:"eventSlug"`
 }
 
 // OrderBookEntry represents a single entry in the order book.
@@ -108,19 +112,22 @@ type Trade struct {
 }
 
 // OpenOrder represents a live order on the CLOB.
+// Note: CLOB returns string fields for sizes/prices but numeric for created_at.
 type OpenOrder struct {
-	ID               string `json:"id"`
-	Market           string `json:"market"`
-	Asset            string `json:"asset_id"`
-	Side             string `json:"side"`
-	Price            string `json:"price"`
-	OriginalSize     string `json:"original_size"`
-	SizeMatched      string `json:"size_matched"`
-	Status           string `json:"status"`
-	OrderType        string `json:"type"`
-	CreatedAt        string `json:"created_at"`
-	ExpirationTime   string `json:"expiration,omitempty"`
-	AssociateTradeID string `json:"associate_trades,omitempty"`
+	ID             string      `json:"id"`
+	Market         string      `json:"market"`
+	Asset          string      `json:"asset_id"`
+	Side           string      `json:"side"`
+	Price          string      `json:"price"`
+	OriginalSize   string      `json:"original_size"`
+	SizeMatched    string      `json:"size_matched"`
+	Status         string      `json:"status"`
+	OrderType      string      `json:"type"`
+	Outcome        string      `json:"outcome"`
+	Owner          string      `json:"owner"`
+	MakerAddress   string      `json:"maker_address"`
+	CreatedAt      json.Number `json:"created_at"`
+	ExpirationTime string      `json:"expiration,omitempty"`
 }
 
 // MarketInfo holds metadata used for order construction.

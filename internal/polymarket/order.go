@@ -2,6 +2,7 @@ package polymarket
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -12,6 +13,8 @@ const (
 	// Exchange contract addresses on Polygon (Chain ID 137)
 	CTFExchangeAddress        = "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E"
 	NegRiskCTFExchangeAddress = "0xC5d563A36AE78145C45a50134d48A1215220f80a"
+	NegRiskAdapterAddress     = "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
+	ConditionalTokensAddress  = "0x4D97DCd97eC945f40cF65F87097ACe5EA0476045"
 	USDCeAddress              = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
 	PolygonChainID            = 137
 )
@@ -90,34 +93,50 @@ func (s *OrderStore) GetByAddress(addr string) (*BuildOrderResult, bool) {
 	return s.cache.get("addr:" + strings.ToLower(addr))
 }
 
+// AuthCache caches derived API credentials by wallet address.
+// Avoids re-signing the auth payload for subsequent orders.
+type AuthCache struct {
+	cache *ttlCache[*ApiCreds]
+}
+
+func NewAuthCache() *AuthCache {
+	return &AuthCache{cache: newTTLCache[*ApiCreds](30 * time.Minute)}
+}
+
+func (c *AuthCache) Put(address string, creds *ApiCreds) {
+	c.cache.set(strings.ToLower(address), creds)
+}
+
+func (c *AuthCache) Get(address string) (*ApiCreds, bool) {
+	return c.cache.get(strings.ToLower(address))
+}
+
 // BuildOrder constructs EIP-712 payloads for both the order and L1 auth.
 func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
-	price, ok := new(big.Float).SetString(params.Price)
-	if !ok {
+	priceF, err := strconv.ParseFloat(params.Price, 64)
+	if err != nil {
 		return nil, fmt.Errorf("invalid price: %s", params.Price)
 	}
-	size, ok := new(big.Float).SetString(params.Size)
-	if !ok {
+	sizeF, err := strconv.ParseFloat(params.Size, 64)
+	if err != nil {
 		return nil, fmt.Errorf("invalid size: %s", params.Size)
 	}
 
-	// Compute maker/taker amounts (USDC.e has 6 decimals)
-	// makerAmount = price * size * 1e6 (for BUY) or size * 1e6 (for SELL)
-	// takerAmount = size * 1e6 (for BUY) or price * size * 1e6 (for SELL)
-	scale := new(big.Float).SetInt64(1_000_000)
-	cost := new(big.Float).Mul(price, size)
+	// Round price to tick size (CLOB rejects amounts that don't align)
+	tickF, _ := strconv.ParseFloat(params.TickSize, 64)
+	if tickF > 0 {
+		priceF = math.Round(priceF/tickF) * tickF
+	}
 
+	// Compute maker/taker amounts as integers (USDC.e has 6 decimals).
+	// Use math.Round to avoid float truncation artifacts.
 	var makerAmount, takerAmount *big.Int
 	if params.Side == Buy {
-		ma := new(big.Float).Mul(cost, scale)
-		makerAmount, _ = ma.Int(nil)
-		ta := new(big.Float).Mul(size, scale)
-		takerAmount, _ = ta.Int(nil)
+		makerAmount = new(big.Int).SetInt64(int64(math.Round(priceF * sizeF * 1e6)))
+		takerAmount = new(big.Int).SetInt64(int64(math.Round(sizeF * 1e6)))
 	} else {
-		ma := new(big.Float).Mul(size, scale)
-		makerAmount, _ = ma.Int(nil)
-		ta := new(big.Float).Mul(cost, scale)
-		takerAmount, _ = ta.Int(nil)
+		makerAmount = new(big.Int).SetInt64(int64(math.Round(sizeF * 1e6)))
+		takerAmount = new(big.Int).SetInt64(int64(math.Round(priceF * sizeF * 1e6)))
 	}
 
 	// Determine exchange contract
@@ -221,9 +240,7 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 		},
 	}
 
-	// Fee estimate
-	priceF, _ := price.Float64()
-	sizeF, _ := size.Float64()
+	// Fee estimate (priceF and sizeF already set above)
 	feeRate, _ := strconv.ParseFloat(feeRateBps, 64)
 	minPrice := priceF
 	if 1-priceF < minPrice {

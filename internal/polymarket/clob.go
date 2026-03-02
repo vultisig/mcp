@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
-	"time"
+	"strings"
 )
 
 // DeriveApiCreds derives ephemeral L2 API credentials from an L1 auth signature.
@@ -42,32 +43,39 @@ func (c *Client) DeriveApiCreds(ctx context.Context, address, authSignature stri
 }
 
 // SubmitOrder posts a signed order to the CLOB using ephemeral L2 credentials.
-func (c *Client) SubmitOrder(ctx context.Context, creds *ApiCreds, orderPayload map[string]any) (map[string]any, error) {
-	return c.authenticatedPost(ctx, creds, "/order", orderPayload)
+// address is the maker's Polygon wallet address (used for POLY_ADDRESS L2 header).
+func (c *Client) SubmitOrder(ctx context.Context, address string, creds *ApiCreds, orderPayload map[string]any) (map[string]any, error) {
+	return c.authenticatedPost(ctx, address, creds, "/order", orderPayload)
 }
 
 // CancelOrder cancels an open order by ID.
-func (c *Client) CancelOrder(ctx context.Context, creds *ApiCreds, orderID string) (map[string]any, error) {
-	return c.authenticatedDelete(ctx, creds, "/order/"+url.PathEscape(orderID))
+// address is the maker's Polygon wallet address.
+func (c *Client) CancelOrder(ctx context.Context, address string, creds *ApiCreds, orderID string) (map[string]any, error) {
+	return c.authenticatedDelete(ctx, address, creds, "/order/"+url.PathEscape(orderID))
 }
 
 // GetOpenOrders fetches open orders for an address, optionally filtered by market.
-func (c *Client) GetOpenOrders(ctx context.Context, creds *ApiCreds, market string) ([]OpenOrder, error) {
+// address is the maker's Polygon wallet address.
+func (c *Client) GetOpenOrders(ctx context.Context, address string, creds *ApiCreds, market string) ([]OpenOrder, error) {
 	path := "/data/orders"
 	if market != "" {
 		path += "?market=" + url.QueryEscape(market)
 	}
 
-	respBody, err := c.authenticatedGet(ctx, creds, path)
+	respBody, err := c.authenticatedGet(ctx, address, creds, path)
 	if err != nil {
 		return nil, err
 	}
 
-	var orders []OpenOrder
-	if err := json.Unmarshal(respBody, &orders); err != nil {
+	// CLOB returns paginated wrapper: {"data": [...], "next_cursor": "...", "limit": N, "count": N}
+	var page struct {
+		Data       []OpenOrder `json:"data"`
+		NextCursor string      `json:"next_cursor"`
+	}
+	if err := json.Unmarshal(respBody, &page); err != nil {
 		return nil, fmt.Errorf("polymarket: decode open orders: %w", err)
 	}
-	return orders, nil
+	return page.Data, nil
 }
 
 // GetTickSize fetches the minimum tick size for a market token.
@@ -102,6 +110,48 @@ func (c *Client) GetNegRisk(ctx context.Context, tokenID string) (bool, error) {
 	return resp.NegRisk, nil
 }
 
+// GetFeeRate fetches the fee rate (in basis points) for a market token.
+func (c *Client) GetFeeRate(ctx context.Context, tokenID string) (string, error) {
+	body, err := c.doGet(ctx, c.clobURL, "/fee-rate?token_id="+url.QueryEscape(tokenID))
+	if err != nil {
+		log.Printf("[polymarket] GetFeeRate failed for %s: %v (defaulting to 0)", tokenID, err)
+		return "0", nil
+	}
+
+	var resp struct {
+		BaseFee json.Number `json:"base_fee"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		log.Printf("[polymarket] GetFeeRate unmarshal failed for %s: %v body=%s (defaulting to 0)", tokenID, err, string(body))
+		return "0", nil
+	}
+	feeStr := resp.BaseFee.String()
+	if feeStr == "" {
+		feeStr = "0"
+	}
+	log.Printf("[polymarket] GetFeeRate for %s: %s bps (raw response: %s)", tokenID, feeStr, string(body))
+	return feeStr, nil
+}
+
+// UpdateBalanceAllowance notifies the CLOB server to re-check on-chain balance/allowance
+// for the given address. The CLOB caches this state and may not reflect recent approvals
+// until this endpoint is called.
+// assetType: "COLLATERAL" for USDC.e, "CONDITIONAL" for outcome tokens.
+// tokenID: required when assetType is "CONDITIONAL", empty otherwise.
+func (c *Client) UpdateBalanceAllowance(ctx context.Context, address string, creds *ApiCreds, sigType int, assetType string, tokenID string) error {
+	path := fmt.Sprintf("/balance-allowance/update?asset_type=%s&signature_type=%d", url.QueryEscape(assetType), sigType)
+	if tokenID != "" {
+		path += "&token_id=" + url.QueryEscape(tokenID)
+	}
+	_, err := c.authenticatedGet(ctx, address, creds, path)
+	if err != nil {
+		log.Printf("[polymarket] UpdateBalanceAllowance failed for %s (%s): %v", address, assetType, err)
+		return err
+	}
+	log.Printf("[polymarket] UpdateBalanceAllowance succeeded for %s (%s, sigType=%d)", address, assetType, sigType)
+	return nil
+}
+
 // HealthCheck pings the CLOB server.
 func (c *Client) HealthCheck(ctx context.Context) error {
 	_, err := c.doGet(ctx, c.clobURL, "/ok")
@@ -109,13 +159,15 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 }
 
 // authenticatedPost sends a POST with L2 HMAC auth headers.
-func (c *Client) authenticatedPost(ctx context.Context, creds *ApiCreds, path string, payload map[string]any) (map[string]any, error) {
+func (c *Client) authenticatedPost(ctx context.Context, address string, creds *ApiCreds, path string, payload map[string]any) (map[string]any, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	headers := BuildL2Headers(*creds, "POST", path, string(data))
+	log.Printf("[polymarket] POST %s address=%s apiKey=%s payload=%s", path, address, creds.Key, string(data))
+
+	headers := BuildL2Headers(address, *creds, "POST", path, string(data))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.clobURL+path, bytes.NewReader(data))
 	if err != nil {
@@ -145,20 +197,16 @@ func (c *Client) authenticatedPost(ctx context.Context, creds *ApiCreds, path st
 }
 
 // authenticatedDelete sends a DELETE with L2 HMAC auth headers.
-func (c *Client) authenticatedDelete(ctx context.Context, creds *ApiCreds, path string) (map[string]any, error) {
-	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	sig := BuildHmacSignature(creds.Secret, timestamp, "DELETE", path, "")
+func (c *Client) authenticatedDelete(ctx context.Context, address string, creds *ApiCreds, path string) (map[string]any, error) {
+	headers := BuildL2Headers(address, *creds, "DELETE", path, "")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.clobURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("POLY_ADDRESS", creds.Key)
-	req.Header.Set("POLY_SIGNATURE", sig)
-	req.Header.Set("POLY_TIMESTAMP", timestamp)
-	req.Header.Set("POLY_NONCE", "0")
-	req.Header.Set("POLY_API_KEY", creds.Key)
-	req.Header.Set("POLY_PASSPHRASE", creds.Passphrase)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -179,8 +227,15 @@ func (c *Client) authenticatedDelete(ctx context.Context, creds *ApiCreds, path 
 }
 
 // authenticatedGet sends a GET with L2 HMAC auth headers.
-func (c *Client) authenticatedGet(ctx context.Context, creds *ApiCreds, path string) ([]byte, error) {
-	headers := BuildL2Headers(*creds, "GET", path, "")
+// IMPORTANT: The HMAC signature must be computed on the base path WITHOUT query params.
+// Query params are only included in the actual HTTP request URL.
+func (c *Client) authenticatedGet(ctx context.Context, address string, creds *ApiCreds, path string) ([]byte, error) {
+	// Split path from query params for HMAC signing (Polymarket signs base path only)
+	signPath := path
+	if idx := strings.IndexByte(path, '?'); idx != -1 {
+		signPath = path[:idx]
+	}
+	headers := BuildL2Headers(address, *creds, "GET", signPath, "")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.clobURL+path, nil)
 	if err != nil {

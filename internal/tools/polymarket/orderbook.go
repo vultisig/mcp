@@ -1,4 +1,4 @@
-package tools
+package polymarket
 
 import (
 	"context"
@@ -8,10 +8,10 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/polymarket"
+	pm "github.com/vultisig/mcp/internal/polymarket"
 )
 
-func newPolymarketOrderbookTool() mcp.Tool {
+func NewOrderbookTool() mcp.Tool {
 	return mcp.NewTool("polymarket_orderbook",
 		mcp.WithDescription(
 			"Get the order book (bids and asks) for a Polymarket outcome token. "+
@@ -25,7 +25,7 @@ func newPolymarketOrderbookTool() mcp.Tool {
 	)
 }
 
-func handlePolymarketOrderbook(pmClient *polymarket.Client) server.ToolHandlerFunc {
+func HandleOrderbook(pmClient *pm.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		tokenID, err := req.RequireString("token_id")
 		if err != nil {

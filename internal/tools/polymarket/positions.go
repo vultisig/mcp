@@ -1,21 +1,20 @@
-package tools
+package polymarket
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/vultisig/mcp/internal/polymarket"
+	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func newPolymarketPositionsTool() mcp.Tool {
+func NewPositionsTool() mcp.Tool {
 	return mcp.NewTool("polymarket_positions",
 		mcp.WithDescription(
 			"Get Polymarket positions for an address. "+
@@ -30,7 +29,7 @@ func newPolymarketPositionsTool() mcp.Tool {
 	)
 }
 
-func handlePolymarketPositions(pmClient *polymarket.Client, store *vault.Store) server.ToolHandlerFunc {
+func HandlePositions(pmClient *pm.Client, store *vault.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 		if explicit != "" && !common.IsHexAddress(explicit) {
@@ -51,16 +50,16 @@ func handlePolymarketPositions(pmClient *polymarket.Client, store *vault.Store) 
 		}
 
 		for i := range positions {
-			size, _ := strconv.ParseFloat(positions[i].Size, 64)
-			curPrice, _ := strconv.ParseFloat(positions[i].CurPrice, 64)
-			avgPrice, _ := strconv.ParseFloat(positions[i].AvgPrice, 64)
+			size, _ := positions[i].Size.Float64()
+			curPrice, _ := positions[i].CurPrice.Float64()
+			avgPrice, _ := positions[i].AvgPrice.Float64()
 
-			positions[i].CurrentValue = fmt.Sprintf("%.2f", size*curPrice)
+			positions[i].CurrentValue = json.Number(fmt.Sprintf("%.2f", size*curPrice))
 
 			if avgPrice > 0 {
-				positions[i].PnlPercent = fmt.Sprintf("%.2f", ((curPrice-avgPrice)/avgPrice)*100)
+				positions[i].PnlPercent = json.Number(fmt.Sprintf("%.2f", ((curPrice-avgPrice)/avgPrice)*100))
 			} else {
-				positions[i].PnlPercent = "0"
+				positions[i].PnlPercent = json.Number("0")
 			}
 		}
 
