@@ -75,7 +75,7 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 			}
 			event.Description = truncateDescription(event.Description)
 
-			tradable := event.Markets[:0]
+			tradable := make([]pm.Market, 0, len(event.Markets))
 			for _, m := range event.Markets {
 				if m.Closed || !m.Active {
 					continue
@@ -92,7 +92,7 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 
 			if qFilter := req.GetString("question_contains", ""); qFilter != "" {
 				qLower := strings.ToLower(qFilter)
-				filtered := event.Markets[:0]
+				filtered := make([]pm.Market, 0, len(event.Markets))
 				for _, m := range event.Markets {
 					if strings.Contains(strings.ToLower(m.Question), qLower) {
 						filtered = append(filtered, m)

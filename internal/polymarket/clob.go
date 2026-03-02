@@ -12,6 +12,14 @@ import (
 	"strings"
 )
 
+// truncateAddr shortens an address for logging: "0xAbCd...1234".
+func truncateAddr(addr string) string {
+	if len(addr) <= 10 {
+		return addr
+	}
+	return addr[:6] + "..." + addr[len(addr)-4:]
+}
+
 // DeriveApiCreds derives ephemeral L2 API credentials from an L1 auth signature.
 // Uses GET /auth/derive-api-key with L1 headers (address, signature, timestamp, nonce).
 func (c *Client) DeriveApiCreds(ctx context.Context, address, authSignature string, timestamp int64) (*ApiCreds, error) {
@@ -145,7 +153,7 @@ func (c *Client) UpdateBalanceAllowance(ctx context.Context, address string, cre
 	}
 	_, err := c.authenticatedGet(ctx, address, creds, path)
 	if err != nil {
-		log.Printf("[polymarket] UpdateBalanceAllowance failed for %s (%s): %v", address, assetType, err)
+		log.Printf("[polymarket] UpdateBalanceAllowance failed for %s (%s): %v", truncateAddr(address), assetType, err)
 		return err
 	}
 	// Success — no log needed (called on every order)
@@ -160,12 +168,16 @@ func (c *Client) HealthCheck(ctx context.Context) error {
 
 // authenticatedPost sends a POST with L2 HMAC auth headers.
 func (c *Client) authenticatedPost(ctx context.Context, address string, creds *ApiCreds, path string, payload map[string]any) (map[string]any, error) {
+	if creds == nil {
+		return nil, fmt.Errorf("polymarket: API credentials required for POST %s", path)
+	}
+
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	log.Printf("[polymarket] POST %s address=%s", path, address)
+	log.Printf("[polymarket] POST %s address=%s", path, truncateAddr(address))
 
 	headers := BuildL2Headers(address, *creds, "POST", path, string(data))
 
@@ -198,6 +210,9 @@ func (c *Client) authenticatedPost(ctx context.Context, address string, creds *A
 
 // authenticatedDelete sends a DELETE with L2 HMAC auth headers.
 func (c *Client) authenticatedDelete(ctx context.Context, address string, creds *ApiCreds, path string) (map[string]any, error) {
+	if creds == nil {
+		return nil, fmt.Errorf("polymarket: API credentials required for DELETE %s", path)
+	}
 	headers := BuildL2Headers(address, *creds, "DELETE", path, "")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.clobURL+path, nil)
@@ -230,6 +245,9 @@ func (c *Client) authenticatedDelete(ctx context.Context, address string, creds 
 // IMPORTANT: The HMAC signature must be computed on the base path WITHOUT query params.
 // Query params are only included in the actual HTTP request URL.
 func (c *Client) authenticatedGet(ctx context.Context, address string, creds *ApiCreds, path string) ([]byte, error) {
+	if creds == nil {
+		return nil, fmt.Errorf("polymarket: API credentials required for GET %s", path)
+	}
 	// Split path from query params for HMAC signing (Polymarket signs base path only)
 	signPath := path
 	if idx := strings.IndexByte(path, '?'); idx != -1 {

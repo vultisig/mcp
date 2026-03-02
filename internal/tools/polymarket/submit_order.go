@@ -94,7 +94,7 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 		var creds *pm.ApiCreds
 		if cached, ok := authCache.Get(address); ok && authSig == "" {
 			// Reuse cached credentials — no auth signing needed
-			log.Printf("[submit_order] using cached API creds for %s", address)
+			log.Printf("[submit_order] using cached API creds for %s...%s", address[:6], address[len(address)-4:])
 			creds = cached
 		} else if authSig != "" {
 			// Derive from auth signature
@@ -131,7 +131,7 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 
 			// Cache creds for future orders
 			authCache.Put(address, creds)
-			log.Printf("[submit_order] cached API creds for %s", address)
+			log.Printf("[submit_order] cached API creds for %s...%s", address[:6], address[len(address)-4:])
 		} else {
 			return mcp.NewToolResultError("no auth_signature provided and no cached credentials found. Call polymarket_build_order to get a fresh auth payload."), nil
 		}
@@ -191,11 +191,15 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 		// The CLOB caches this state; recent approval txns may not be reflected yet.
 		// For BUY: refresh COLLATERAL (USDC.e) balance/allowance.
 		// For SELL: refresh CONDITIONAL (outcome token) balance/allowance with token_id.
-		_ = pmClient.UpdateBalanceAllowance(ctx, address, creds, 0, "COLLATERAL", "") // sigType 0 = EOA
+		if err := pmClient.UpdateBalanceAllowance(ctx, address, creds, 0, "COLLATERAL", ""); err != nil { // sigType 0 = EOA
+			log.Printf("[submit_order] UpdateBalanceAllowance COLLATERAL failed: %v", err)
+		}
 		sideVal, _ := orderMsg["side"].(string)
 		if sideVal == "SELL" {
 			tokenID, _ := orderMsg["tokenId"].(string)
-			_ = pmClient.UpdateBalanceAllowance(ctx, address, creds, 0, "CONDITIONAL", tokenID)
+			if err := pmClient.UpdateBalanceAllowance(ctx, address, creds, 0, "CONDITIONAL", tokenID); err != nil {
+				log.Printf("[submit_order] UpdateBalanceAllowance CONDITIONAL failed: %v", err)
+			}
 		}
 
 		// Pass wallet address for POLY_ADDRESS L2 header (distinct from API key)

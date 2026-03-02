@@ -109,7 +109,7 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 				return mcp.NewToolResultError("price must be > 0 to calculate shares from spend"), nil
 			}
 			shares := spendF / priceF
-			amount = strconv.FormatFloat(shares, 'f', 6, 64)
+			amount = strconv.FormatFloat(shares, 'f', 2, 64)
 		} else {
 			amount = amountStr
 		}
@@ -269,7 +269,7 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 		if side == pm.Sell {
 			sideLabel = "SELL"
 		}
-		summary := fmt.Sprintf("%s %.2f shares of '%s' (%s) at $%s ($%.2f spend, ~$%s fee)",
+		summary := fmt.Sprintf("%s %.2f shares of '%s' (%s) at $%s ($%.2f spend, ~%s fee)",
 			sideLabel, sizeF, resolved.Question, resolved.Outcome, price, cost, buildResult.FeeEstimate)
 
 		result := placeBetResult{

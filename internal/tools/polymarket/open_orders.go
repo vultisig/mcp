@@ -108,7 +108,7 @@ func HandleOpenOrders(pmClient *pm.Client, authCache *pm.AuthCache, store *vault
 func resolveAuthCreds(ctx context.Context, pmClient *pm.Client, authCache *pm.AuthCache, address, authSig, authTS string) (*pm.ApiCreds, error) {
 	// Try cache first
 	if cached, ok := authCache.Get(address); ok {
-		log.Printf("[auth] using cached API creds for %s", address)
+		log.Printf("[auth] using cached API creds for %s...%s", address[:6], address[len(address)-4:])
 		return cached, nil
 	}
 
@@ -132,6 +132,6 @@ func resolveAuthCreds(ctx context.Context, pmClient *pm.Client, authCache *pm.Au
 
 	// Cache for future use
 	authCache.Put(address, creds)
-	log.Printf("[auth] cached API creds for %s", address)
+	log.Printf("[auth] cached API creds for %s...%s", address[:6], address[len(address)-4:])
 	return creds, nil
 }

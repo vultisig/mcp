@@ -196,9 +196,15 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid price: %s", params.Price)
 	}
+	if priceF <= 0 {
+		return nil, fmt.Errorf("price must be positive, got: %s", params.Price)
+	}
 	sizeF, err := strconv.ParseFloat(params.Size, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid size: %s", params.Size)
+	}
+	if sizeF <= 0 {
+		return nil, fmt.Errorf("size must be positive, got: %s", params.Size)
 	}
 
 	rc := getRoundConfig(params.TickSize)

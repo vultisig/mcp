@@ -28,7 +28,17 @@ func (c *ttlCache[V]) get(key string) (V, bool) {
 	e, ok := c.entries[key]
 	c.mu.RUnlock()
 
-	if !ok || time.Now().After(e.expiresAt) {
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	if time.Now().After(e.expiresAt) {
+		// Remove expired entry to prevent memory leak
+		c.mu.Lock()
+		if e2, ok2 := c.entries[key]; ok2 && time.Now().After(e2.expiresAt) {
+			delete(c.entries, key)
+		}
+		c.mu.Unlock()
 		var zero V
 		return zero, false
 	}

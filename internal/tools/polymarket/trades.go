@@ -45,6 +45,9 @@ func HandleTrades(pmClient *pm.Client, store *vault.Store) server.ToolHandlerFun
 		limit := 20
 		if v := req.GetFloat("limit", 0); v > 0 {
 			limit = int(v)
+			if limit > 100 {
+				limit = 100
+			}
 		}
 
 		trades, err := pmClient.GetTrades(ctx, addr, limit)

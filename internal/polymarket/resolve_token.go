@@ -33,6 +33,9 @@ func (c *Client) ResolveToken(ctx context.Context, eventSlug, outcome string) (*
 	}
 
 	outLower := strings.ToLower(strings.TrimSpace(outcome))
+	if outLower == "" {
+		return nil, fmt.Errorf("outcome is required — specify the outcome to bet on (e.g. 'Yes', 'No', or a candidate name)")
+	}
 
 	// Filter to tradable markets
 	var tradable []Market

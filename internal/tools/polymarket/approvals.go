@@ -109,7 +109,10 @@ func HandleCheckApprovals(store *vault.Store, pool *evmclient.Pool) server.ToolH
 				var isMissing bool
 				if ch.isERC1155 {
 					approved, err := client.IsApprovedForAll(gctx, ch.contract, addr, ch.addr)
-					isMissing = err != nil || !approved
+					if err != nil {
+						return fmt.Errorf("check ERC-1155 approval for %s: %w", ch.label, err)
+					}
+					isMissing = !approved
 				} else {
 					allowance, _, _, err := client.GetAllowance(gctx, ch.contract, addr, ch.addr)
 					if err != nil {
