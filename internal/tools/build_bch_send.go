@@ -69,7 +69,7 @@ func handleBuildBCHSend(store *vault.Store, bcClient *blockchair.Client) server.
 		}
 
 		feeRateFloat := req.GetFloat("fee_rate", 0)
-		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat < 0 || feeRateFloat > float64(math.MaxUint64) {
+		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat < 0 || feeRateFloat >= float64(math.MaxUint64) {
 			return mcp.NewToolResultError("fee_rate must be a valid positive number"), nil
 		}
 		feeRate := uint64(math.Round(feeRateFloat))
