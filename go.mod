@@ -17,6 +17,7 @@ require (
 	github.com/mark3labs/mcp-go v0.44.0
 	github.com/vultisig/recipes v0.0.0-20260224014344-cb8b6790d744
 	github.com/vultisig/vultisig-go v0.0.0-20260124100803-5ee9e9f8e9d5
+	github.com/xyield/xrpl-go v0.0.0-20230914223425-9abe75c05830
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -158,6 +159,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
