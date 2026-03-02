@@ -7,13 +7,17 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/programs/system"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/vultisig/mcp/internal/jupiter"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
@@ -23,7 +27,7 @@ import (
 
 func TestBuildSolanaTx_InvalidAmount(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -56,7 +60,7 @@ func TestBuildSolanaTx_InvalidAmount(t *testing.T) {
 
 func TestBuildSolanaTx_InvalidAddress(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -88,7 +92,7 @@ func TestBuildSolanaTx_InvalidAddress(t *testing.T) {
 
 func TestBuildSolanaTx_MissingParams(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	tests := []struct {
@@ -122,7 +126,7 @@ func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 		ChainCode:      testChainCode,
 	})
 
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	req := callToolReq("build_solana_tx", map[string]any{
@@ -169,7 +173,7 @@ func TestBuildSolanaTx_Integration(t *testing.T) {
 	from := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
 	to := solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
 
-	client := solanaclient.NewClient("https://api.mainnet-beta.solana.com")
+	client := solanaclient.NewClient(rpc.New("https://api.mainnet-beta.solana.com"))
 
 	txBytes, err := client.BuildNativeTransfer(context.Background(), from, to, 1_000_000)
 	if err != nil {
@@ -335,7 +339,7 @@ func verifySolanaSDKCompat(t *testing.T, txBytes []byte, wantInstructions int) {
 
 func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
 	store := vault.NewStore()
-	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient("https://localhost:0"))
+	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
 
 	req := callToolReq("build_spl_transfer_tx", map[string]any{
@@ -359,6 +363,182 @@ func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
 	if !strings.Contains(tc.Text, "build_solana_tx") {
 		t.Errorf("error should mention build_solana_tx, got: %s", tc.Text)
 	}
+}
+
+func TestBuildSolanaSwap_MissingParams(t *testing.T) {
+	store := vault.NewStore()
+	jupClient := newMockJupiterClient(t)
+	handler := handleBuildSolanaSwap(store, jupClient)
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		args map[string]any
+	}{
+		{"missing_output_mint", map[string]any{
+			"from":   "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA",
+			"amount": "1000000",
+		}},
+		{"missing_amount", map[string]any{
+			"from":        "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA",
+			"output_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+		}},
+		{"missing_from_no_vault", map[string]any{
+			"output_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+			"amount":      "1000000",
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := callToolReq("build_solana_swap", tt.args)
+			res, err := handler(ctx, req)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if !res.IsError {
+				t.Fatal("expected tool error for missing params")
+			}
+		})
+	}
+}
+
+func TestBuildSolanaSwap_InvalidAmount(t *testing.T) {
+	store := vault.NewStore()
+	jupClient := newMockJupiterClient(t)
+	handler := handleBuildSolanaSwap(store, jupClient)
+	ctx := context.Background()
+
+	tests := []struct {
+		name   string
+		amount string
+	}{
+		{"not_a_number", "abc"},
+		{"negative", "-100"},
+		{"zero", "0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := callToolReq("build_solana_swap", map[string]any{
+				"from":        "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA",
+				"output_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+				"amount":      tt.amount,
+			})
+			res, err := handler(ctx, req)
+			if err != nil {
+				t.Fatalf("unexpected Go error: %v", err)
+			}
+			if !res.IsError {
+				t.Fatal("expected tool error for invalid amount")
+			}
+		})
+	}
+}
+
+func TestBuildSolanaSwap_DefaultSlippageAndInputMint(t *testing.T) {
+	store := vault.NewStore()
+	jupSrv, rpcSrv := newMockJupiterServers(t)
+	defer jupSrv.Close()
+	defer rpcSrv.Close()
+
+	jupClient := jupiter.NewClient(jupSrv.URL, rpc.New(rpcSrv.URL))
+	handler := handleBuildSolanaSwap(store, jupClient)
+	ctx := context.Background()
+
+	req := callToolReq("build_solana_swap", map[string]any{
+		"from":        "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA",
+		"output_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+		"amount":      "1000000",
+	})
+
+	res, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if res.IsError {
+		tc, ok := res.Content[0].(mcp.TextContent)
+		if ok {
+			t.Fatalf("tool returned error: %s", tc.Text)
+		}
+		t.Fatal("tool returned error")
+	}
+
+	text := resultText(t, res)
+	var result types.TransactionResult
+	err = json.Unmarshal([]byte(text), &result)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if len(result.Transactions) != 1 {
+		t.Fatalf("expected 1 transaction, got %d", len(result.Transactions))
+	}
+	tx := result.Transactions[0]
+	if tx.Chain != "Solana" {
+		t.Errorf("chain = %q, want Solana", tx.Chain)
+	}
+	if tx.Action != "swap" {
+		t.Errorf("action = %q, want swap", tx.Action)
+	}
+	if tx.SigningMode != types.SigningModeEdDSA {
+		t.Errorf("signing mode = %q, want %q", tx.SigningMode, types.SigningModeEdDSA)
+	}
+	if tx.UnsignedTxHex == "" {
+		t.Error("unsigned tx hex is empty")
+	}
+	if tx.TxDetails["input_mint"] != solana.SolMint.String() {
+		t.Errorf("input_mint = %q, want SOL mint (default)", tx.TxDetails["input_mint"])
+	}
+}
+
+func newMockJupiterClient(t *testing.T) *jupiter.Client {
+	t.Helper()
+	jupSrv, rpcSrv := newMockJupiterServers(t)
+	t.Cleanup(jupSrv.Close)
+	t.Cleanup(rpcSrv.Close)
+	return jupiter.NewClient(jupSrv.URL, rpc.New(rpcSrv.URL))
+}
+
+func newMockJupiterServers(t *testing.T) (*httptest.Server, *httptest.Server) {
+	t.Helper()
+
+	jupSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/swap/v1/quote":
+			json.NewEncoder(w).Encode(jupiter.QuoteResponse{
+				InputMint:            solana.SolMint.String(),
+				InAmount:             "1000000",
+				OutputMint:           "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+				OutAmount:            "500",
+				OtherAmountThreshold: "495",
+				SlippageBps:          100,
+				PriceImpactPct:       "0.01",
+			})
+		case "/swap/v1/swap-instructions":
+			json.NewEncoder(w).Encode(jupiter.SwapInstructionsResponse{
+				ComputeBudgetInstructions: []jupiter.InstructionData{},
+				SetupInstructions:         []jupiter.InstructionData{},
+				SwapInstruction: jupiter.InstructionData{
+					ProgramId: solana.SystemProgramID.String(),
+					Accounts: []jupiter.Account{
+						{Pubkey: "7nYhDeFWriouc5PhCH98WCxocNPKfXjJqeFJo59DMKSA", IsSigner: true, IsWritable: true},
+					},
+					Data: "AQAAAA==",
+				},
+			})
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+
+	rpcSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"context":{"slot":1},"value":{"blockhash":"11111111111111111111111111111111","lastValidBlockHeight":100}}}`))
+	}))
+
+	return jupSrv, rpcSrv
 }
 
 func skipUnlessSolanaTest(t *testing.T) {

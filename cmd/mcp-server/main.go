@@ -11,10 +11,13 @@ import (
 	btcsdk "github.com/vultisig/recipes/sdk/btc"
 	"github.com/vultisig/recipes/sdk/swap"
 
+	"github.com/gagliardetto/solana-go/rpc"
+
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	"github.com/vultisig/mcp/internal/config"
 	evmclient "github.com/vultisig/mcp/internal/evm"
+	"github.com/vultisig/mcp/internal/jupiter"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/skills"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
@@ -51,13 +54,17 @@ func main() {
 		server.WithRecovery(),
 	)
 
-	solClient := solanaclient.NewClient(cfg.SolanaRPCURL)
+	solanaRPC := rpc.New(cfg.SolanaRPCURL)
+	solClient := solanaclient.NewClient(solanaRPC)
 	logger.Printf("solana RPC: %s", cfg.SolanaRPCURL)
+
+	jupClient := jupiter.NewClient(cfg.JupiterAPIURL, solanaRPC)
+	logger.Printf("jupiter API: %s", cfg.JupiterAPIURL)
 
 	swapSvc := swap.NewService()
 	utxoBuilder := btcsdk.Mainnet()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient, solClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient, solClient, jupClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)
