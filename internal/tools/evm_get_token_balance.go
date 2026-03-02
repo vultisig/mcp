@@ -76,7 +76,7 @@ func handleEVMGetTokenBalance(store *vault.Store, pool *evmclient.Pool) server.T
 		}
 		data, err := json.Marshal(result)
 		if err != nil {
-			return nil, fmt.Errorf("marshal result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

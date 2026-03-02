@@ -6,62 +6,148 @@ tags: [utxo, bitcoin, litecoin, dogecoin, transfer]
 
 # UTXO Transfer
 
-Build an unsigned UTXO transaction for any supported chain (Bitcoin, Litecoin, Dogecoin, Dash, Bitcoin-Cash, Zcash).
+Build an unsigned UTXO transaction for any supported chain: Bitcoin, Litecoin, Dogecoin, Bitcoin-Cash, Dash, or Zcash.
 
 ## Prerequisites
 
-- Sender address (explicit or via `set_vault_info`)
+- Vault set via `set_vault_info` (or an explicit sender address)
 - Recipient address
-- Amount to send (in the chain's base unit, e.g. satoshis for Bitcoin)
+- Amount in the chain's base unit (satoshis for BTC/LTC/BCH/DASH, koinus for DOGE, zatoshis for ZEC)
 
-## Steps
+## Bitcoin (BTC)
 
-### 1. Check the sender's balance
-
-```
-get_utxo_balance(chain: "bitcoin", address: "<sender>")
-```
-
-Verify the balance is sufficient for the transfer plus fees.
-
-### 2. List available UTXOs
+### 1. Get the recommended fee rate
 
 ```
-list_utxos(chain: "bitcoin", address: "<sender>")
+btc_fee_rate()
 ```
 
-This returns unspent outputs with `txid`, `vout`, and `value` (in satoshis).
+Returns the recommended sat/vB fee rate from THORChain.
 
-### 3. Select inputs and calculate fee
-
-Select UTXOs whose total value covers the send amount plus the desired fee. A typical fee calculation:
-
-- Estimate transaction size: `~10 + (148 * num_inputs) + (34 * num_outputs) + 10` bytes (for legacy P2PKH)
-- Multiply by the desired fee rate (satoshis per byte)
-- For segwit transactions, the weight calculation differs
-
-Ensure: `sum(input_values) >= send_amount + fee`
-
-The change (if any) goes back to the sender:
-`change = sum(input_values) - send_amount - fee`
-
-### 4. Build the unsigned transaction
+### 2. Build the unsigned PSBT
 
 ```
-build_utxo_tx(
-  chain: "bitcoin",
-  inputs: '[{"txid":"<txid1>","vout":0,"value":50000},{"txid":"<txid2>","vout":1,"value":30000}]',
-  outputs: '[{"address":"<recipient>","amount":70000},{"address":"<sender>","amount":8000}]'
+build_btc_send(
+  to_address: "<recipient>",
+  amount: "<satoshis>",
+  fee_rate: <sat_per_vb>
 )
 ```
 
-The fee is implicit: `fee = sum(inputs) - sum(outputs)`.
+For THORChain swaps, add a `memo` parameter with the swap instruction. The tool automatically selects UTXOs, calculates fees, and handles change.
 
-The result contains the serialized unsigned transaction hex, ready to be signed by the vault.
+---
+
+## Litecoin (LTC)
+
+### 1. Get the recommended fee rate
+
+```
+ltc_fee_rate()
+```
+
+### 2. Build the unsigned PSBT
+
+```
+build_ltc_send(
+  to_address: "<recipient>",
+  amount: "<litoshis>",
+  fee_rate: <sat_per_vb>
+)
+```
+
+---
+
+## Dogecoin (DOGE)
+
+### 1. Get the recommended fee rate
+
+```
+doge_fee_rate()
+```
+
+### 2. Build the unsigned PSBT
+
+```
+build_doge_send(
+  to_address: "<recipient>",
+  amount: "<koinus>",
+  fee_rate: <sat_per_vb>
+)
+```
+
+Minimum output (dust limit) is 100,000,000 koinus (1 DOGE).
+
+---
+
+## Bitcoin-Cash (BCH)
+
+### 1. Get the recommended fee rate
+
+```
+bch_fee_rate()
+```
+
+### 2. Build the unsigned PSBT
+
+```
+build_bch_send(
+  to_address: "<recipient>",
+  amount: "<satoshis>",
+  fee_rate: <sat_per_vb>
+)
+```
+
+BCH addresses can use either legacy (`1...`) or CashAddr (`bitcoincash:q...`) format.
+
+---
+
+## Dash (DASH)
+
+### 1. Get the recommended fee rate
+
+```
+dash_fee_rate()
+```
+
+### 2. Build the unsigned PSBT
+
+```
+build_dash_send(
+  to_address: "<recipient>",
+  amount: "<duffs>",
+  fee_rate: <sat_per_vb>
+)
+```
+
+---
+
+## Zcash (ZEC)
+
+Zcash transactions use automatic ZIP-317 fee estimation — no fee rate parameter needed.
+
+```
+build_zec_send(
+  to_address: "<recipient>",
+  amount: "<zatoshis>"
+)
+```
+
+The tool selects UTXOs, estimates the fee using ZIP-317, and returns a v4 transparent transaction with embedded signature hashes ready for ECDSA signing.
+
+---
+
+## Optional parameters (all chains except ZEC)
+
+| Parameter | Description |
+|-----------|-------------|
+| `memo` | OP_RETURN memo (max 80 bytes). Used for THORChain/MayaChain swap instructions. |
+| `address` | Override the sender address. Falls back to the vault-derived address if omitted. |
 
 ## Notes
 
-- Always include a change output back to the sender unless the inputs exactly cover the amount + fee.
-- The fee is **not** an explicit parameter — it's the difference between total inputs and total outputs.
-- Use `convert_amount` to convert between human-readable amounts and satoshis if needed.
-- Supported chains: `bitcoin`, `litecoin`, `dogecoin`, `dash`, `bitcoin-cash`, `zcash`.
+- All tools require `set_vault_info` to be called first (unless `address` is overridden).
+- Use `convert_amount` to convert human-readable amounts to base units if needed.
+- The transaction result contains the unsigned hex, ready to be signed by the vault.
+- BTC, LTC, BCH, DASH transactions are encoded as PSBT (`tx_encoding: "psbt"`).
+- ZEC transactions are encoded as Zcash v4 (`tx_encoding: "zcash_v4"`).

@@ -32,6 +32,8 @@ const (
 const (
 	TxEncodingLegacyRLP  = "legacy_rlp"
 	TxEncodingEIP1559RLP = "eip1559_rlp"
+	TxEncodingPSBT       = "psbt"
+	TxEncodingZcashV4    = "zcash_v4"
 )
 
 var evmChainNames = buildEVMChainNames()

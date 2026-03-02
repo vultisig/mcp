@@ -126,7 +126,7 @@ func handleEVMTxInfo(store *vault.Store, pool *evmclient.Pool) server.ToolHandle
 
 		data, err := json.Marshal(resp)
 		if err != nil {
-			return nil, fmt.Errorf("marshal evm_tx_info result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal evm_tx_info result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

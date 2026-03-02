@@ -29,7 +29,7 @@ Note the `contract_address` and `decimals` from the result.
 ### 2. Check the sender's token balance
 
 ```
-get_token_balance(token_address: "<contract>", address: "<sender>")
+evm_get_token_balance(chain: "Ethereum", contract_address: "<contract>", address: "<sender>")
 ```
 
 Verify the balance is sufficient for the transfer.
@@ -40,7 +40,7 @@ Use `abi_encode` to build the ERC-20 `transfer(address,uint256)` calldata:
 
 ```
 abi_encode(
-  function: "transfer(address,uint256)",
+  signature: "transfer(address,uint256)",
   args: "<recipient>,<amount_in_smallest_unit>"
 )
 ```
@@ -48,7 +48,7 @@ abi_encode(
 The amount must be in the token's smallest unit (e.g. for USDC with 6 decimals, 1 USDC = 1000000). Use `convert_amount` if needed:
 
 ```
-convert_amount(amount: "1.5", decimals: 6, direction: "to_smallest")
+convert_amount(amount: "1.5", decimals: 6, direction: "to_base")
 ```
 
 ### 4. Get transaction parameters

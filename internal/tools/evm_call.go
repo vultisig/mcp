@@ -131,7 +131,7 @@ func handleEVMCall(pool *evmclient.Pool) server.ToolHandlerFunc {
 
 		data, err := json.Marshal(resp)
 		if err != nil {
-			return nil, fmt.Errorf("marshal evm_call result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal evm_call result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

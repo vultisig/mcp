@@ -61,7 +61,7 @@ func handleABIDecode() server.ToolHandlerFunc {
 		resp := map[string]any{"values": formatted}
 		data, err := json.Marshal(resp)
 		if err != nil {
-			return nil, fmt.Errorf("marshal abi_decode result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal abi_decode result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

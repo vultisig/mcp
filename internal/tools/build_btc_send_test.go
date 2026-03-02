@@ -242,7 +242,7 @@ func TestBuildBTCSend_NegativeUTXOSkipped(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, rawTxs)
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -286,7 +286,7 @@ func TestBuildBTCSend_Basic(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, rawTxs)
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -366,7 +366,7 @@ func TestBuildBTCSend_WithMemo(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, rawTxs)
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	memo := "=:ETH.ETH:0x1234567890abcdef1234567890abcdef12345678"
 	req := callToolReq("build_btc_send", map[string]any{
@@ -433,7 +433,7 @@ func TestBuildBTCSend_InsufficientFunds(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, map[string]string{})
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -463,7 +463,7 @@ func TestBuildBTCSend_PSBTMetadata(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, rawTxs)
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -542,7 +542,7 @@ func TestBuildBTCSend_SwapWorkflow(t *testing.T) {
 	bcSrv := mockBlockchairServer(t, utxos, rawTxs)
 	defer bcSrv.Close()
 
-	sendHandler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(bcSrv.URL))
+	sendHandler := handleBuildBTCSend(store, blockchair.NewClient(bcSrv.URL))
 
 	sendReq := callToolReq("build_btc_send", map[string]any{
 		"to_address": vaultAddr,
@@ -633,7 +633,7 @@ func TestBuildBTCSend_KeysignHashes(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, rawTxs)
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -702,7 +702,7 @@ func TestBuildBTCSend_MemoTooLong(t *testing.T) {
 	srv := mockBlockchairServer(t, utxos, map[string]string{})
 	defer srv.Close()
 
-	handler := handleBuildBTCSend(store, btcsdk.Mainnet(), blockchair.NewClient(srv.URL))
+	handler := handleBuildBTCSend(store, blockchair.NewClient(srv.URL))
 
 	longMemo := strings.Repeat("x", 81)
 	req := callToolReq("build_btc_send", map[string]any{
