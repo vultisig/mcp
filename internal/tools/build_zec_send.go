@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 
@@ -61,6 +62,9 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 		if err != nil || amount == 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %q", amountStr)), nil
 		}
+		if amount > math.MaxInt64 {
+			return mcp.NewToolResultError(fmt.Sprintf("amount %d exceeds maximum allowed value", amount)), nil
+		}
 
 		memo := req.GetString("memo", "")
 		if len(memo) > 80 {
@@ -79,8 +83,9 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Zcash address: %v", err)), nil
 		}
-		if explicitAddr != "" {
-			senderAddr = explicitAddr
+		if explicitAddr != "" && explicitAddr != senderAddr {
+			return mcp.NewToolResultError(fmt.Sprintf(
+				"address %q does not match vault-derived address %q", explicitAddr, senderAddr)), nil
 		}
 
 		pubKeyBytes, err := hex.DecodeString(derivedPubKey)
@@ -147,14 +152,19 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 
 			fee := zecEstimateFee(len(inputs), outputs)
 			if totalInput >= amount+fee {
-				outputs[changeIdx].Value = int64(totalInput - amount - fee)
+				change := totalInput - amount - fee
+				if change > math.MaxInt64 {
+					return mcp.NewToolResultError("change amount overflow"), nil
+				}
+				outputs[changeIdx].Value = int64(change)
 				break
 			}
 		}
 
-		if totalInput < amount+zecEstimateFee(len(inputs), outputs) {
+		neededFee := zecEstimateFee(len(inputs), outputs)
+		if totalInput < amount+neededFee {
 			return mcp.NewToolResultError(
-				fmt.Sprintf("insufficient funds: have %d zatoshis, need more than %d", totalInput, amount),
+				fmt.Sprintf("insufficient funds: have %d zatoshis, need %d (amount %d + fee %d)", totalInput, amount+neededFee, amount, neededFee),
 			), nil
 		}
 

@@ -90,8 +90,9 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Bitcoin address: %v", err)), nil
 		}
-		if explicitAddr != "" {
-			senderAddr = explicitAddr
+		if explicitAddr != "" && explicitAddr != senderAddr {
+			return mcp.NewToolResultError(fmt.Sprintf(
+				"address %q does not match vault-derived address %q", explicitAddr, senderAddr)), nil
 		}
 
 		pubKeyBytes, err := hex.DecodeString(derivedPubKey)
