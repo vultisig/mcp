@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/rpc"
 )
 
 func TestFormatLamports(t *testing.T) {
@@ -54,7 +55,7 @@ func TestParsePublicKey(t *testing.T) {
 }
 
 func TestGetTokenProgram_NativeMint(t *testing.T) {
-	client := NewClient("https://localhost:0")
+	client := NewClient(rpc.New("https://localhost:0"))
 	ctx := context.Background()
 
 	pubkey, decimals, err := client.GetTokenProgram(ctx, solana.SolMint)
