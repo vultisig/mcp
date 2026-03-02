@@ -23,36 +23,36 @@ import (
 	"github.com/vultisig/mcp/internal/vault"
 )
 
-func newBuildBTCSendTool() mcp.Tool {
-	return mcp.NewTool("build_btc_send",
+func newBuildDOGESendTool() mcp.Tool {
+	return mcp.NewTool("build_doge_send",
 		mcp.WithDescription(
-			"Build an unsigned Bitcoin PSBT for a send or swap. "+
+			"Build an unsigned Dogecoin PSBT for a send or swap. "+
 				"Automatically selects UTXOs, calculates fees, and handles change. "+
 				"For THORChain swaps, provide the memo parameter to include an OP_RETURN output. "+
 				"Requires set_vault_info to be called first.",
 		),
 		mcp.WithString("to_address",
-			mcp.Description("Recipient Bitcoin address (or THORChain vault address for swaps)"),
+			mcp.Description("Recipient Dogecoin address"),
 			mcp.Required(),
 		),
 		mcp.WithString("amount",
-			mcp.Description("Amount to send in satoshis (decimal string)"),
+			mcp.Description("Amount to send in koinus (1 DOGE = 100,000,000 koinus, decimal string)"),
 			mcp.Required(),
 		),
 		mcp.WithNumber("fee_rate",
-			mcp.Description("Fee rate in sat/vB (use btc_fee_rate tool to get recommended rate)"),
+			mcp.Description("Fee rate in sat/vB (use doge_fee_rate tool to get recommended rate)"),
 			mcp.Required(),
 		),
 		mcp.WithString("memo",
 			mcp.Description("Optional OP_RETURN memo (e.g. THORChain swap instruction)"),
 		),
 		mcp.WithString("address",
-			mcp.Description("Sender Bitcoin address. Falls back to vault-derived address if omitted."),
+			mcp.Description("Sender Dogecoin address. Falls back to vault-derived address if omitted."),
 		),
 	)
 }
 
-func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.ToolHandlerFunc {
+func handleBuildDOGESend(store *vault.Store, bcClient *blockchair.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {
@@ -83,9 +83,9 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
 		}
 
-		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Bitcoin)
+		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Dogecoin)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("derive Bitcoin address: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("derive Dogecoin address: %v", err)), nil
 		}
 		if explicitAddr != "" {
 			senderAddr = explicitAddr
@@ -96,7 +96,7 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			return mcp.NewToolResultError(fmt.Sprintf("decode derived pubkey: %v", err)), nil
 		}
 
-		dashboard, err := bcClient.GetAddressDashboard(ctx, "Bitcoin", senderAddr)
+		dashboard, err := bcClient.GetAddressDashboard(ctx, "Dogecoin", senderAddr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("fetch UTXOs: %v", err)), nil
 		}
@@ -113,14 +113,14 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			})
 		}
 
-		btcChain := utxoChains["Bitcoin"]
+		dogeChain := utxoChains["Dogecoin"]
 
-		recipientScript, err := btcChain.addressToPkScript(toAddress)
+		recipientScript, err := dogeChain.addressToPkScript(toAddress)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to_address: %v", err)), nil
 		}
 
-		changeScript, err := btcChain.addressToPkScript(senderAddr)
+		changeScript, err := dogeChain.addressToPkScript(senderAddr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid sender address: %v", err)), nil
 		}
@@ -142,13 +142,13 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 		}
 
 		changeIdx := 1
-		utxoBuilder := btcsdk.Mainnet()
+		utxoBuilder := btcsdk.NewBuilder(100_000_000)
 		result, err := utxoBuilder.Build(utxos, outputs, changeIdx, feeRate, pubKeyBytes)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("build transaction: %v", err)), nil
 		}
 
-		err = btcsdk.PopulatePSBTMetadata(result, bcClient.ChainFetcherWithCtx(ctx, "Bitcoin"))
+		err = btcsdk.PopulatePSBTMetadata(result, bcClient.ChainFetcherWithCtx(ctx, "Dogecoin"))
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("populate PSBT metadata: %v", err)), nil
 		}
@@ -168,12 +168,12 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			Transactions: []types.Transaction{
 				{
 					Sequence:      1,
-					Chain:         "Bitcoin",
+					Chain:         "Dogecoin",
 					Action:        action,
 					SigningMode:   types.SigningModeECDSA,
 					UnsignedTxHex: hex.EncodeToString(buf.Bytes()),
 					TxDetails: map[string]string{
-						"ticker":      "BTC",
+						"ticker":      "DOGE",
 						"from":        senderAddr,
 						"to":          toAddress,
 						"amount":      amountStr,

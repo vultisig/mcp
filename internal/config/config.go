@@ -33,6 +33,7 @@ type Config struct {
 	EVM           EVMRPCConfig
 	BlockchairURL string `envconfig:"BLOCKCHAIR_API_URL" default:"https://api.vultisig.com/blockchair"`
 	ThorchainURL  string `envconfig:"THORCHAIN_URL" default:"https://thornode.ninerealms.com"`
+	MayachainURL  string `envconfig:"MAYACHAIN_URL" default:"https://mayanode.mayachain.info"`
 	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
 	JupiterAPIURL string `envconfig:"JUPITER_API_URL" default:"https://api.jup.ag"`
 }

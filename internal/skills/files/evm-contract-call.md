@@ -14,7 +14,7 @@ Interact with any EVM smart contract — read-only calls or state-changing trans
 
 ```
 abi_encode(
-  function: "balanceOf(address)",
+  signature: "balanceOf(address)",
   args: "0x1234..."
 )
 ```
@@ -45,7 +45,7 @@ The `output_types` parameter decodes the raw return data. Common patterns:
 
 ```
 abi_encode(
-  function: "approve(address,uint256)",
+  signature: "approve(address,uint256)",
   args: "<spender>,<amount>"
 )
 ```

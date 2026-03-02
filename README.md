@@ -29,9 +29,11 @@ go build -o mcp-server ./cmd/mcp-server/
 | `EVM_BLAST_URL` | `https://blast-rpc.publicnode.com` | Blast JSON-RPC endpoint |
 | `EVM_MANTLE_URL` | `https://mantle-rpc.publicnode.com` | Mantle JSON-RPC endpoint |
 | `EVM_ZKSYNC_URL` | `https://mainnet.era.zksync.io` | zkSync Era JSON-RPC endpoint |
-| `COINGECKO_API_KEY` | (empty) | CoinGecko API key (optional, raises rate limits) |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
-| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node URL for fee rates and swap data |
+| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node URL for fee rates (BTC, LTC, DOGE, BCH) |
+| `MAYACHAIN_URL` | `https://mayanode.mayachain.info` | MayaChain node URL for fee rates (DASH, ZEC) |
+| `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
+| `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 
 ## Tools
 
@@ -171,55 +173,11 @@ Build unsigned transaction(s) for a token swap. Supports THORChain, MayaChain, 1
 
 ---
 
-### UTXO Chains
-
-UTXO tools support: Bitcoin, Bitcoin-Cash, Dash, Dogecoin, Litecoin, Zcash.
-
-#### `get_utxo_balance`
-
-Query balance and address stats. Address falls back to vault-derived if omitted.
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `chain` | Yes | UTXO chain name |
-| `address` | No | Address to query. Falls back to vault-derived if omitted. |
-
-#### `get_utxo_transactions`
-
-List recent transaction hashes for an address.
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `chain` | Yes | UTXO chain name |
-| `address` | No | Address to query. Falls back to vault-derived if omitted. |
-| `limit` | No | Max number of hashes to return (default 50, max 100) |
-
-#### `list_utxos`
-
-List unspent transaction outputs for an address.
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `chain` | Yes | UTXO chain name |
-| `address` | No | Address to query. Falls back to vault-derived if omitted. |
-
-#### `build_utxo_tx`
-
-Build an unsigned UTXO transaction with explicit inputs and outputs. Fee = sum(inputs) − sum(outputs).
-
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `chain` | Yes | UTXO chain name |
-| `inputs` | Yes | JSON array: `[{"txid":"<hex>","vout":<n>,"value":<sats>}]` |
-| `outputs` | Yes | JSON array: `[{"address":"<addr>","amount":<sats>}]` |
-
----
-
-### Bitcoin (high-level)
+### Bitcoin
 
 #### `btc_fee_rate`
 
-Get the recommended Bitcoin fee rate in sat/vB from THORChain inbound addresses. No parameters.
+Get the recommended Bitcoin fee rate in sat/vB from THORChain. No parameters.
 
 #### `build_btc_send`
 
@@ -230,8 +188,169 @@ Build an unsigned Bitcoin PSBT for a send or swap. Automatically selects UTXOs, 
 | `to_address` | Yes | Recipient Bitcoin address (or THORChain vault address for swaps) |
 | `amount` | Yes | Amount to send in satoshis (decimal string) |
 | `fee_rate` | Yes | Fee rate in sat/vB (use `btc_fee_rate` tool to get recommended rate) |
-| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction). Adds an OP_RETURN output. |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
 | `address` | No | Sender Bitcoin address. Falls back to vault-derived if omitted. |
+
+---
+
+### Litecoin
+
+#### `ltc_fee_rate`
+
+Get the recommended Litecoin fee rate in sat/vB from THORChain. No parameters.
+
+#### `build_ltc_send`
+
+Build an unsigned Litecoin PSBT for a send or swap. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to_address` | Yes | Recipient Litecoin address |
+| `amount` | Yes | Amount to send in litoshis (decimal string) |
+| `fee_rate` | Yes | Fee rate in sat/vB (use `ltc_fee_rate` to get recommended rate) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `address` | No | Sender Litecoin address. Falls back to vault-derived if omitted. |
+
+---
+
+### Dogecoin
+
+#### `doge_fee_rate`
+
+Get the recommended Dogecoin fee rate in sat/vB from THORChain. No parameters.
+
+#### `build_doge_send`
+
+Build an unsigned Dogecoin PSBT for a send or swap. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to_address` | Yes | Recipient Dogecoin address |
+| `amount` | Yes | Amount to send in koinus (1 DOGE = 100,000,000 koinus, decimal string) |
+| `fee_rate` | Yes | Fee rate in sat/vB (use `doge_fee_rate` to get recommended rate) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `address` | No | Sender Dogecoin address. Falls back to vault-derived if omitted. |
+
+---
+
+### Bitcoin Cash
+
+#### `bch_fee_rate`
+
+Get the recommended Bitcoin Cash fee rate in sat/vB from THORChain. No parameters.
+
+#### `build_bch_send`
+
+Build an unsigned Bitcoin Cash PSBT for a send or swap. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to_address` | Yes | Recipient Bitcoin Cash address (CashAddr or legacy format) |
+| `amount` | Yes | Amount to send in satoshis (decimal string) |
+| `fee_rate` | Yes | Fee rate in sat/vB (use `bch_fee_rate` to get recommended rate) |
+| `memo` | No | OP_RETURN memo (e.g. THORChain swap instruction) |
+| `address` | No | Sender Bitcoin Cash address. Falls back to vault-derived if omitted. |
+
+---
+
+### Dash
+
+#### `dash_fee_rate`
+
+Get the recommended Dash fee rate in sat/vB from MayaChain. No parameters.
+
+#### `build_dash_send`
+
+Build an unsigned Dash PSBT for a send or swap. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to_address` | Yes | Recipient Dash address |
+| `amount` | Yes | Amount to send in duffs (1 DASH = 100,000,000 duffs, decimal string) |
+| `fee_rate` | Yes | Fee rate in sat/vB (use `dash_fee_rate` to get recommended rate) |
+| `memo` | No | OP_RETURN memo (e.g. MayaChain swap instruction) |
+| `address` | No | Sender Dash address. Falls back to vault-derived if omitted. |
+
+---
+
+### Zcash
+
+#### `build_zec_send`
+
+Build an unsigned Zcash v4 (Sapling) transaction for a send or swap. Fee is calculated automatically using ZIP-317 — no `fee_rate` parameter needed. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to_address` | Yes | Recipient Zcash transparent address (t1... or t3...) |
+| `amount` | Yes | Amount to send in zatoshis (1 ZEC = 100,000,000 zatoshis, decimal string) |
+| `memo` | No | OP_RETURN memo (e.g. MayaChain swap instruction, max 80 bytes) |
+| `address` | No | Sender Zcash address. Falls back to vault-derived if omitted. |
+
+---
+
+### MayaChain
+
+#### `maya_fee_rate`
+
+Get the recommended fee rate for any MayaChain-supported chain in sat/vB.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `chain` | Yes | MayaChain chain identifier: `BTC`, `ETH`, `ARB`, `ZEC`, `DASH`, or `THOR` |
+
+---
+
+### Solana
+
+#### `get_sol_balance`
+
+Query the native SOL balance of a Solana address.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `address` | No | Solana address (base58). Falls back to vault-derived if omitted. |
+
+#### `get_spl_token_balance`
+
+Query the SPL token balance of a Solana address for a given mint.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `mint` | Yes | Token mint address (base58) |
+| `address` | No | Solana address (base58). Falls back to vault-derived if omitted. |
+
+#### `build_solana_tx`
+
+Build an unsigned native SOL transfer transaction. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to` | Yes | Recipient Solana address (base58) |
+| `amount` | Yes | Amount in lamports (decimal string) |
+| `from` | No | Sender Solana address. Falls back to vault-derived if omitted. |
+
+#### `build_spl_transfer_tx`
+
+Build an unsigned SPL token transfer transaction. Auto-detects token program (SPL vs Token-2022) and creates the destination ATA if it doesn't exist. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to` | Yes | Recipient Solana address (base58, the owner — not the ATA) |
+| `mint` | Yes | Token mint address (base58) |
+| `amount` | Yes | Amount in base units (decimal string) |
+| `from` | No | Sender Solana address. Falls back to vault-derived if omitted. |
+
+#### `build_solana_swap`
+
+Build an unsigned Solana swap transaction via Jupiter aggregator. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `output_mint` | Yes | Destination token mint address (base58). Leave empty for native SOL. |
+| `amount` | Yes | Amount to swap in base units (lamports for SOL, smallest unit for tokens) |
+| `input_mint` | No | Source token mint address (base58). Empty for native SOL. |
+| `slippage_bps` | No | Slippage tolerance in basis points (default: 100 = 1%) |
+| `from` | No | Sender Solana address. Falls back to vault-derived if omitted. |
 
 ---
 

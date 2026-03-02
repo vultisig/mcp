@@ -2,8 +2,10 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcutil/base58"
@@ -26,12 +28,8 @@ var utxoChains = map[string]utxoChainParams{
 		txVersion:         2,
 	},
 	"Litecoin": {
-		addressToPkScript: btcAddrToPkScript(&chaincfg.Params{
-			PubKeyHashAddrID: 0x30,
-			ScriptHashAddrID: 0x32,
-			Bech32HRPSegwit:  "ltc",
-		}),
-		txVersion: 2,
+		addressToPkScript: ltcAddrToPkScript,
+		txVersion:         2,
 	},
 	"Dogecoin": {
 		addressToPkScript: btcAddrToPkScript(&chaincfg.Params{
@@ -67,6 +65,33 @@ func btcAddrToPkScript(params *chaincfg.Params) func(string) ([]byte, error) {
 		}
 		return txscript.PayToAddrScript(decoded)
 	}
+}
+
+// ltcAddrToPkScript decodes a Litecoin address (bech32 segwit or legacy P2PKH/P2SH)
+// and produces a pkScript. btcutil.DecodeAddress requires network registration to
+// handle bech32 prefixes, so segwit addresses are decoded directly.
+func ltcAddrToPkScript(addr string) ([]byte, error) {
+	if strings.HasPrefix(strings.ToLower(addr), "ltc1") {
+		_, data, err := bech32.Decode(strings.ToLower(addr))
+		if err != nil {
+			return nil, fmt.Errorf("decode LTC bech32 address %q: %w", addr, err)
+		}
+		if len(data) < 2 {
+			return nil, fmt.Errorf("LTC bech32 address too short: %q", addr)
+		}
+		witnessProgram, err := bech32.ConvertBits(data[1:], 5, 8, false)
+		if err != nil {
+			return nil, fmt.Errorf("decode LTC bech32 bits %q: %w", addr, err)
+		}
+		builder := txscript.NewScriptBuilder()
+		builder.AddOp(txscript.OP_0)
+		builder.AddData(witnessProgram)
+		return builder.Script()
+	}
+	return btcAddrToPkScript(&chaincfg.Params{
+		PubKeyHashAddrID: 0x30,
+		ScriptHashAddrID: 0x32,
+	})(addr)
 }
 
 // bchAddrToPkScript decodes a Bitcoin Cash CashAddr and produces a pkScript.
@@ -138,4 +163,3 @@ func p2shScript(hash []byte) []byte {
 	script[22] = txscript.OP_EQUAL
 	return script
 }
-

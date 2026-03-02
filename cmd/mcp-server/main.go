@@ -8,7 +8,6 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 
-	btcsdk "github.com/vultisig/recipes/sdk/btc"
 	"github.com/vultisig/recipes/sdk/swap"
 
 	"github.com/gagliardetto/solana-go/rpc"
@@ -19,6 +18,7 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/jupiter"
 	mcplog "github.com/vultisig/mcp/internal/logging"
+	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/skills"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
@@ -62,9 +62,10 @@ func main() {
 	logger.Printf("jupiter API: %s", cfg.JupiterAPIURL)
 
 	swapSvc := swap.NewService()
-	utxoBuilder := btcsdk.Mainnet()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, utxoBuilder, tcClient, solClient, jupClient); err != nil {
+	mcClient := mayachain.NewClient(cfg.MayachainURL)
+	logger.Printf("mayachain: %s", cfg.MayachainURL)
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)

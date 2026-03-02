@@ -33,7 +33,8 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `EVM_MANTLE_URL` | `https://mantle-rpc.publicnode.com` | Mantle endpoint |
 | `EVM_ZKSYNC_URL` | `https://mainnet.era.zksync.io` | zkSync Era endpoint |
 | `BLOCKCHAIR_API_URL` | `https://api.vultisig.com/blockchair` | Blockchair proxy base URL for UTXO chain queries |
-| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
+| `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates (BTC, LTC, DOGE, BCH) |
+| `MAYACHAIN_URL` | `https://mayanode.mayachain.info` | MayaChain node base URL for fee rates (DASH, ZEC) |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 
@@ -49,6 +50,7 @@ internal/evm/
   pool.go                        # Lazy-init per-chain client pool
   chains.go                      # Chain name → chain ID, ticker, default RPC URL
   format.go                      # FormatUnits, DecodeABIString helpers
+internal/mayachain/client.go     # MayaChain node client (fee rates via inbound_addresses)
 internal/tools/
   tools.go                       # RegisterAll() orchestrator (tools + protocols)
   set_vault_info.go              # Store vault keys in session
@@ -60,28 +62,33 @@ internal/tools/
   evm_tx_info.go                 # Get nonce/gas/fees for tx building
   build_evm_tx.go                # Build unsigned EIP-1559 transaction
   build_swap_tx.go               # Build swap transaction via recipes SDK
-  build_utxo_tx.go               # Build unsigned UTXO transaction
   search_token.go                # Token discovery via CoinGecko API
   abi_encode.go                  # ABI encode function calls / raw args
   abi_decode.go                  # ABI decode output data
   convert_amount.go
   registry.go
-internal/coingecko/client.go     # CoinGecko REST API client
-internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
-internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
-internal/solana/client.go        # Solana RPC client wrapper
-internal/jupiter/client.go       # Jupiter DEX aggregator API client
-internal/tools/
-  get_utxo_balance.go            # Query UTXO chain address balance
-  get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
-  list_utxos.go                  # List unspent transaction outputs
-  btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
+  btc_fee_rate.go                # BTC fee rate from THORChain
   build_btc_send.go              # Build unsigned BTC PSBT for send or swap
+  ltc_fee_rate.go                # LTC fee rate from THORChain
+  build_ltc_send.go              # Build unsigned LTC PSBT for send or swap
+  doge_fee_rate.go               # DOGE fee rate from THORChain
+  build_doge_send.go             # Build unsigned DOGE PSBT for send or swap
+  bch_fee_rate.go                # BCH fee rate from THORChain
+  build_bch_send.go              # Build unsigned BCH PSBT for send or swap
+  dash_fee_rate.go               # DASH fee rate from MayaChain
+  build_dash_send.go             # Build unsigned DASH PSBT for send or swap
+  build_zec_send.go              # Build unsigned Zcash v4 tx (automatic ZIP-317 fee)
+  maya_fee_rate.go               # Fee rate for any MayaChain-supported chain
   get_sol_balance.go             # Query native SOL balance
   get_spl_token_balance.go       # Query SPL token balance
   build_solana_tx.go             # Build unsigned native SOL transfer
   build_spl_transfer_tx.go       # Build unsigned SPL token transfer
   build_solana_swap.go           # Build unsigned Solana swap via Jupiter
+internal/coingecko/client.go     # CoinGecko REST API client
+internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
+internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
+internal/solana/client.go        # Solana RPC client wrapper
+internal/jupiter/client.go       # Jupiter DEX aggregator API client
 ```
 
 ## Key Dependencies
@@ -89,7 +96,7 @@ internal/tools/
 - `github.com/mark3labs/mcp-go` — MCP server framework (stdio, tool registration)
 - `github.com/kelseyhightower/envconfig` — Struct-tag-based env config
 - `github.com/vultisig/vultisig-go` — Address derivation from vault keys
-- `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), and swap operations
+- `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), Zcash v4, and swap operations
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
 - `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
 - `github.com/gagliardetto/solana-go` — Solana RPC client and transaction building
@@ -100,6 +107,20 @@ All EVM tools accept a `chain` parameter (default: `Ethereum`):
 `Ethereum`, `BSC`, `Polygon`, `Avalanche`, `Arbitrum`, `Optimism`, `Base`, `Blast`, `Mantle`, `Zksync`
 
 All chains use EIP-1559 (type 2) transactions. No legacy tx fallback.
+
+## UTXO Chains
+
+| Chain | Tool prefix | Fee source | Tx format | Dust limit |
+|-------|-------------|------------|-----------|------------|
+| Bitcoin | `btc_*` | THORChain ("BTC") | PSBT | 546 |
+| Litecoin | `ltc_*` | THORChain ("LTC") | PSBT | 5460 |
+| Dogecoin | `doge_*` | THORChain ("DOGE") | PSBT | 100,000,000 |
+| Bitcoin-Cash | `bch_*` | THORChain ("BCH") | PSBT | 546 |
+| Dash | `dash_*` | MayaChain ("DASH") | PSBT | 546 |
+| Zcash | `build_zec_send` | automatic ZIP-317 | Zcash v4 + metadata | — |
+
+Zcash transactions use `recipes/sdk/zcash` with `SerializeWithMetadata` to embed sig hashes for the verifier.
+No `fee_rate` param for ZEC — fee is computed automatically.
 
 ## Logging
 
@@ -122,3 +143,4 @@ Logging is implemented via mcp-go `ToolHandlerMiddleware` (for tool call timing)
 - ERC-20 queries use raw ABI encoding (no abigen).
 - Replace directives in go.mod are required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`.
 - EVM client pool (`internal/evm.Pool`) lazily creates per-chain clients on first use and caches them.
+- Default URLs belong in `config.go` (envconfig defaults), not in client constructors.
