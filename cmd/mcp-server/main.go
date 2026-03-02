@@ -24,6 +24,7 @@ import (
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/tools"
 	"github.com/vultisig/mcp/internal/vault"
+	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
 func main() {
@@ -61,11 +62,14 @@ func main() {
 	jupClient := jupiter.NewClient(cfg.JupiterAPIURL, solanaRPC)
 	logger.Printf("jupiter API: %s", cfg.JupiterAPIURL)
 
+	xrpClient := xrpclient.NewClient(cfg.XrpRpcURL)
+	logger.Printf("xrp RPC: %s", cfg.XrpRpcURL)
+
 	swapSvc := swap.NewService()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
 	mcClient := mayachain.NewClient(cfg.MayachainURL)
 	logger.Printf("mayachain: %s", cfg.MayachainURL)
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)

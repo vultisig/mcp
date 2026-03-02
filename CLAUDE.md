@@ -37,6 +37,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `MAYACHAIN_URL` | `https://mayanode.mayachain.info` | MayaChain node base URL for fee rates (DASH, ZEC) |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
+| `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
 
 ## Architecture
 
@@ -67,7 +68,14 @@ internal/tools/
   abi_decode.go                  # ABI decode output data
   convert_amount.go
   registry.go
-  btc_fee_rate.go                # BTC fee rate from THORChain
+internal/coingecko/client.go     # CoinGecko REST API client
+internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
+internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
+internal/solana/client.go        # Solana RPC client wrapper
+internal/jupiter/client.go       # Jupiter DEX aggregator API client
+internal/xrp/client.go           # XRP Ledger JSON-RPC client
+internal/tools/
+  btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
   build_btc_send.go              # Build unsigned BTC PSBT for send or swap
   ltc_fee_rate.go                # LTC fee rate from THORChain
   build_ltc_send.go              # Build unsigned LTC PSBT for send or swap
@@ -84,11 +92,8 @@ internal/tools/
   build_solana_tx.go             # Build unsigned native SOL transfer
   build_spl_transfer_tx.go       # Build unsigned SPL token transfer
   build_solana_swap.go           # Build unsigned Solana swap via Jupiter
-internal/coingecko/client.go     # CoinGecko REST API client
-internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
-internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
-internal/solana/client.go        # Solana RPC client wrapper
-internal/jupiter/client.go       # Jupiter DEX aggregator API client
+  get_xrp_balance.go             # Query native XRP balance
+  build_xrp_send.go              # Build unsigned XRP Payment for send or swap
 ```
 
 ## Key Dependencies
@@ -100,6 +105,7 @@ internal/jupiter/client.go       # Jupiter DEX aggregator API client
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
 - `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
 - `github.com/gagliardetto/solana-go` — Solana RPC client and transaction building
+- `github.com/xyield/xrpl-go` — XRP Ledger binary codec for transaction encoding
 
 ## EVM Chains
 
