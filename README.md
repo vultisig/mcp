@@ -34,6 +34,7 @@ go build -o mcp-server ./cmd/mcp-server/
 | `MAYACHAIN_URL` | `https://mayanode.mayachain.info` | MayaChain node URL for fee rates (DASH, ZEC) |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
+| `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
 
 ## Tools
 
@@ -351,6 +352,29 @@ Build an unsigned Solana swap transaction via Jupiter aggregator. Requires `set_
 | `input_mint` | No | Source token mint address (base58). Empty for native SOL. |
 | `slippage_bps` | No | Slippage tolerance in basis points (default: 100 = 1%) |
 | `from` | No | Sender Solana address. Falls back to vault-derived if omitted. |
+
+---
+
+### XRP (Ripple)
+
+#### `get_xrp_balance`
+
+Query the native XRP balance of an XRP Ledger address.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `address` | No | XRP Ledger address. Falls back to vault-derived if omitted. |
+
+#### `build_xrp_send`
+
+Build an unsigned XRP Ledger Payment transaction. Automatically fetches sequence number, current ledger, and base fee. Requires `set_vault_info` first.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `to` | Yes | Recipient XRP address (or THORChain vault address for swaps) |
+| `amount` | Yes | Amount in drops (1 XRP = 1,000,000 drops, decimal string) |
+| `memo` | No | THORChain swap memo (ASCII). Gets hex-encoded into the XRPL Memos field. |
+| `from` | No | Sender XRP address. Falls back to vault-derived if omitted. |
 
 ---
 
