@@ -1,0 +1,62 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/vault"
+	xrpclient "github.com/vultisig/mcp/internal/xrp"
+)
+
+func newGetXRPBalanceTool() mcp.Tool {
+	return mcp.NewTool("get_xrp_balance",
+		mcp.WithDescription(
+			"Query the native XRP balance of an XRP Ledger address. "+
+				"If no address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+		),
+		mcp.WithString("address",
+			mcp.Description("XRP address. Optional if vault info is set."),
+		),
+	)
+}
+
+func handleGetXRPBalance(store *vault.Store, xrpClient *xrpclient.Client) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		explicit := req.GetString("address", "")
+
+		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Ripple")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		info, err := xrpClient.GetAccountInfo(ctx, addr)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("get XRP balance: %v", err)), nil
+		}
+
+		drops, err := strconv.ParseUint(info.Balance, 10, 64)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("parse balance: %v", err)), nil
+		}
+
+		xrpWhole := float64(drops) / 1_000_000
+
+		result := map[string]any{
+			"address":       addr,
+			"balance_drops": drops,
+			"balance_xrp":   fmt.Sprintf("%.6f", xrpWhole),
+		}
+
+		data, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("marshal xrp balance result: %w", err)
+		}
+		return mcp.NewToolResultText(string(data)), nil
+	}
+}

@@ -36,6 +36,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `THORCHAIN_URL` | `https://thornode.ninerealms.com` | THORChain node base URL for fee rates |
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
+| `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
 
 ## Architecture
 
@@ -71,6 +72,7 @@ internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisi
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
 internal/solana/client.go        # Solana RPC client wrapper
 internal/jupiter/client.go       # Jupiter DEX aggregator API client
+internal/xrp/client.go           # XRP Ledger JSON-RPC client
 internal/tools/
   get_utxo_balance.go            # Query UTXO chain address balance
   get_utxo_transactions.go       # List recent tx hashes for UTXO chain address
@@ -82,6 +84,8 @@ internal/tools/
   build_solana_tx.go             # Build unsigned native SOL transfer
   build_spl_transfer_tx.go       # Build unsigned SPL token transfer
   build_solana_swap.go           # Build unsigned Solana swap via Jupiter
+  get_xrp_balance.go             # Query native XRP balance
+  build_xrp_send.go              # Build unsigned XRP Payment for send or swap
 ```
 
 ## Key Dependencies
@@ -93,6 +97,7 @@ internal/tools/
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
 - `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
 - `github.com/gagliardetto/solana-go` — Solana RPC client and transaction building
+- `github.com/xyield/xrpl-go` — XRP Ledger binary codec for transaction encoding
 
 ## EVM Chains
 

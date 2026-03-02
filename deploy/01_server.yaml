@@ -48,6 +48,11 @@ spec:
                 configMapKeyRef:
                   name: mcp-config
                   key: blockchair-api-url
+            - name: XRP_RPC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mcp-config
+                  key: xrp-rpc-url
           resources:
             requests:
               memory: "32Mi"

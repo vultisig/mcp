@@ -35,6 +35,7 @@ type Config struct {
 	ThorchainURL  string `envconfig:"THORCHAIN_URL" default:"https://thornode.ninerealms.com"`
 	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
 	JupiterAPIURL string `envconfig:"JUPITER_API_URL" default:"https://api.jup.ag"`
+	XrpRpcURL     string `envconfig:"XRP_RPC_URL" default:"https://s1.ripple.com:51234"`
 }
 
 // ToURLMap converts the EVM RPC config to a chain-name → URL map,
