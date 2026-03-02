@@ -52,7 +52,7 @@ func handleGetSOLBalance(store *vault.Store, solClient *solanaclient.Client) ser
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return nil, fmt.Errorf("marshal sol balance result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal sol balance result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

@@ -59,7 +59,7 @@ func handleGetXRPBalance(store *vault.Store, xrpClient *xrpclient.Client) server
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return nil, fmt.Errorf("marshal xrp balance result: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("marshal xrp balance result: %v", err)), nil
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

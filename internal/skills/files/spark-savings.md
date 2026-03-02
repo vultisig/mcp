@@ -178,7 +178,7 @@ Depositing requires two transactions: an ERC-20 approval followed by the vault d
 ### Step 1 — Check the underlying token balance
 
 ```
-get_token_balance(token_address: "<underlying_token>", address: "<sender>")
+evm_get_token_balance(chain: "<chain>", contract_address: "<underlying_token>", address: "<sender>")
 ```
 
 Verify the sender has enough of the underlying token.
@@ -191,7 +191,7 @@ Encode the approval calldata:
 
 ```
 abi_encode(
-  function: "approve(address,uint256)",
+  signature: "approve(address,uint256)",
   args: "<vault_address>,<deposit_amount>"
 )
 ```
@@ -220,7 +220,7 @@ Encode the deposit calldata:
 
 ```
 abi_encode(
-  function: "deposit(uint256,address)",
+  signature: "deposit(uint256,address)",
   args: "<deposit_amount>,<receiver_address>"
 )
 ```
@@ -265,7 +265,7 @@ This returns the maximum underlying asset amount the owner can withdraw.
 
 ```
 abi_encode(
-  function: "withdraw(uint256,address,address)",
+  signature: "withdraw(uint256,address,address)",
   args: "<withdraw_amount>,<receiver>,<owner>"
 )
 ```
@@ -294,7 +294,7 @@ Use `redeem` when the user wants to exit a specific number of **shares** rather 
 
 ```
 abi_encode(
-  function: "redeem(uint256,address,address)",
+  signature: "redeem(uint256,address,address)",
   args: "<shares_amount>,<receiver>,<owner>"
 )
 ```
