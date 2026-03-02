@@ -196,7 +196,10 @@ func (c *Client) authenticatedPost(ctx context.Context, address string, creds *A
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("polymarket: reading response body for POST %s: %w", path, readErr)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("polymarket: POST %s returned %d: %s", path, resp.StatusCode, string(respBody))
 	}
@@ -229,7 +232,10 @@ func (c *Client) authenticatedDelete(ctx context.Context, address string, creds 
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("polymarket: reading response body for DELETE %s: %w", path, readErr)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("polymarket: DELETE %s returned %d: %s", path, resp.StatusCode, string(respBody))
 	}
@@ -269,7 +275,10 @@ func (c *Client) authenticatedGet(ctx context.Context, address string, creds *Ap
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, fmt.Errorf("polymarket: reading response body for GET %s: %w", path, readErr)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("polymarket: GET %s returned %d: %s", path, resp.StatusCode, string(body))
 	}

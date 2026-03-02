@@ -111,6 +111,10 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 			shares := spendF / priceF
 			amount = strconv.FormatFloat(shares, 'f', 2, 64)
 		} else {
+			amountF, err := strconv.ParseFloat(amountStr, 64)
+			if err != nil || amountF <= 0 {
+				return mcp.NewToolResultError("amount must be a positive number"), nil
+			}
 			amount = amountStr
 		}
 

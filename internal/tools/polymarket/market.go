@@ -102,6 +102,9 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 			}
 
 			offset := int(req.GetFloat("offset", 0))
+			if offset < 0 {
+				offset = 0
+			}
 			limit := int(req.GetFloat("limit", defaultMarketsPageSize))
 			if limit <= 0 {
 				limit = defaultMarketsPageSize

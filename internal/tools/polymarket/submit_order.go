@@ -57,6 +57,9 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 		if orderSig == "" || address == "" {
 			return mcp.NewToolResultError("order_signature and address are required"), nil
 		}
+		if len(address) < 10 {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s (expected 0x-prefixed hex)", address)), nil
+		}
 
 		var orderParamsStr string
 		var orderType string

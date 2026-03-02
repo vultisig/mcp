@@ -207,10 +207,24 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 		return nil, fmt.Errorf("size must be positive, got: %s", params.Size)
 	}
 
+	// Validate order type
+	switch params.OrderType {
+	case GTC, GTD, FOK, FAK:
+		// valid
+	default:
+		return nil, fmt.Errorf("unknown order type: %q (must be GTC, GTD, FOK, or FAK)", params.OrderType)
+	}
+	if params.OrderType == GTD && params.Expiry <= 0 {
+		return nil, fmt.Errorf("GTD orders require a positive expiry timestamp")
+	}
+
 	rc := getRoundConfig(params.TickSize)
 
 	// Round price to tick precision
 	priceF = roundNormal(priceF, rc.price)
+	if priceF > 1.0 {
+		return nil, fmt.Errorf("price must be <= 1.0 (probability), got: %.4f", priceF)
+	}
 
 	// Compute maker/taker amounts following py-clob-client's exact rounding rules:
 	// - "base" quantity → round_down to rc.size (always 2) decimal places
@@ -225,7 +239,10 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 	var rawMaker, rawTaker float64
 	if isMarketOrder && params.Side == Buy && params.Spend != "" {
 		// Market BUY: USDC spend is the base, shares are derived
-		spendF, _ := strconv.ParseFloat(params.Spend, 64)
+		spendF, err := strconv.ParseFloat(params.Spend, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid spend: %s", params.Spend)
+		}
 		rawMaker = roundDown(spendF, rc.size)
 		rawTaker = rawMaker / priceF
 		rawTaker = conditionalRound(rawTaker, rc.amount)
