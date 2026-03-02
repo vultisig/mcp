@@ -11,6 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
+	addresscodec "github.com/xyield/xrpl-go/address-codec"
 	xrpgo "github.com/xyield/xrpl-go/binary-codec"
 
 	"github.com/vultisig/mcp/internal/resolve"
@@ -50,6 +51,9 @@ func handleBuildXRPSend(store *vault.Store, xrpClient *xrpclient.Client) server.
 		if err != nil {
 			return mcp.NewToolResultError("missing to parameter"), nil
 		}
+		if !addresscodec.IsValidClassicAddress(toAddr) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid XRP address: %q", toAddr)), nil
+		}
 
 		amountStr, err := req.RequireString("amount")
 		if err != nil {
@@ -74,6 +78,9 @@ func handleBuildXRPSend(store *vault.Store, xrpClient *xrpclient.Client) server.
 			return mcp.NewToolResultError(fmt.Sprintf("derive XRP address: %v", err)), nil
 		}
 		if explicit != "" {
+			if !addresscodec.IsValidClassicAddress(explicit) {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid sender XRP address: %q", explicit)), nil
+			}
 			senderAddr = explicit
 		}
 

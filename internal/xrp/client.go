@@ -42,8 +42,8 @@ type rpcResponse struct {
 type rpcResult struct {
 	Status       string      `json:"status,omitempty"`
 	AccountData  accountData `json:"account_data,omitempty"`
-	LedgerIndex  interface{} `json:"ledger_index,omitempty"`
-	Info         serverInfo  `json:"info,omitempty"`
+	LedgerIndex  json.Number `json:"ledger_index,omitempty"`
+	Drops        feeDrops    `json:"drops,omitempty"`
 	Error        string      `json:"error,omitempty"`
 	ErrorMessage string      `json:"error_message,omitempty"`
 }
@@ -51,16 +51,11 @@ type rpcResult struct {
 type accountData struct {
 	Account  string      `json:"Account"`
 	Balance  string      `json:"Balance"`
-	Sequence interface{} `json:"Sequence"`
+	Sequence json.Number `json:"Sequence"`
 }
 
-type serverInfo struct {
-	ValidatedLedger validatedLedger `json:"validated_ledger,omitempty"`
-	BaseFee         interface{}     `json:"base_fee,omitempty"`
-}
-
-type validatedLedger struct {
-	Seq interface{} `json:"seq,omitempty"`
+type feeDrops struct {
+	BaseFee string `json:"base_fee"`
 }
 
 func (c *Client) do(ctx context.Context, method string, param rpcParam) (*rpcResult, error) {
@@ -88,8 +83,11 @@ func (c *Client) do(ctx context.Context, method string, param rpcParam) (*rpcRes
 		return nil, fmt.Errorf("xrp: unexpected status %d", resp.StatusCode)
 	}
 
+	dec := json.NewDecoder(resp.Body)
+	dec.UseNumber()
+
 	var rpcResp rpcResponse
-	err = json.NewDecoder(resp.Body).Decode(&rpcResp)
+	err = dec.Decode(&rpcResp)
 	if err != nil {
 		return nil, fmt.Errorf("xrp: decode response: %w", err)
 	}
@@ -116,22 +114,13 @@ func (c *Client) GetAccountInfo(ctx context.Context, address string) (*AccountIn
 		return nil, fmt.Errorf("get account info: %w", err)
 	}
 
-	var sequence uint32
-	switch v := result.AccountData.Sequence.(type) {
-	case float64:
-		sequence = uint32(v)
-	case string:
-		seq, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("xrp: parse sequence: %w", err)
-		}
-		sequence = uint32(seq)
-	default:
-		return nil, fmt.Errorf("xrp: unexpected sequence type: %T", v)
+	seq, err := strconv.ParseUint(result.AccountData.Sequence.String(), 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("xrp: parse sequence: %w", err)
 	}
 
 	return &AccountInfo{
-		Sequence: sequence,
+		Sequence: uint32(seq),
 		Balance:  result.AccountData.Balance,
 	}, nil
 }
@@ -144,42 +133,31 @@ func (c *Client) GetCurrentLedger(ctx context.Context) (uint32, error) {
 		return 0, fmt.Errorf("get current ledger: %w", err)
 	}
 
-	switch v := result.LedgerIndex.(type) {
-	case float64:
-		return uint32(v), nil
-	case string:
-		idx, err := strconv.ParseUint(v, 10, 32)
-		if err != nil {
-			return 0, fmt.Errorf("xrp: parse ledger index: %w", err)
-		}
-		return uint32(idx), nil
-	default:
-		return 0, fmt.Errorf("xrp: unexpected ledger index type: %T", v)
+	idx, err := strconv.ParseUint(result.LedgerIndex.String(), 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("xrp: parse ledger index: %w", err)
 	}
+	return uint32(idx), nil
 }
 
 func (c *Client) GetBaseFee(ctx context.Context) (uint64, error) {
-	result, err := c.do(ctx, "server_info", rpcParam{})
+	result, err := c.do(ctx, "fee", rpcParam{})
 	if err != nil {
 		return 0, fmt.Errorf("get base fee: %w", err)
 	}
 
-	var baseFee uint64 = 12
-	if result.Info.BaseFee != nil {
-		switch v := result.Info.BaseFee.(type) {
-		case float64:
-			baseFee = uint64(v)
-		case string:
-			fee, err := strconv.ParseUint(v, 10, 64)
-			if err == nil {
-				baseFee = fee
-			}
-		}
+	if result.Drops.BaseFee == "" {
+		return 0, fmt.Errorf("xrp: fee response missing drops.base_fee")
 	}
 
-	if baseFee < 12 {
-		baseFee = 12
+	fee, err := strconv.ParseUint(result.Drops.BaseFee, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("xrp: parse base fee %q: %w", result.Drops.BaseFee, err)
 	}
 
-	return baseFee, nil
+	if fee < 12 {
+		fee = 12
+	}
+
+	return fee, nil
 }

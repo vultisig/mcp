@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	addresscodec "github.com/xyield/xrpl-go/address-codec"
 
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
@@ -29,6 +30,9 @@ func newGetXRPBalanceTool() mcp.Tool {
 func handleGetXRPBalance(store *vault.Store, xrpClient *xrpclient.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
+		if explicit != "" && !addresscodec.IsValidClassicAddress(explicit) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid XRP address: %q", explicit)), nil
+		}
 
 		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Ripple")
 		if err != nil {
