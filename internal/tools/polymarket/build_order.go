@@ -21,16 +21,8 @@ import (
 func NewBuildOrderTool() mcp.Tool {
 	return mcp.NewTool("polymarket_build_order",
 		mcp.WithDescription(
-			"Build EIP-712 typed data payloads for a Polymarket order. "+
-				"PREREQUISITE: You MUST call polymarket_search first to get the event_slug — never fabricate or guess slugs. "+
-				"Returns the order payload to sign, and an auth payload (only if not cached). "+
-				"IMPORTANT: The response contains an 'order_ref' field (e.g. 'ord_1740912030123456789') — you MUST pass this EXACT string to polymarket_submit_order. NEVER fabricate an order_ref. "+
-				"If auth_cached is true, only sign the order — auth is reused from a previous signing. "+
-				"Both (or just order) must be signed via sign_typed_data before calling polymarket_submit_order. "+
-				"Automatically fetches tick_size, neg_risk, and fee_rate. Validates $1 minimum order and USDC.e balance. "+
-				"REQUIRED: Use event_slug + outcome (from search results) instead of token_id. "+
-				"Use 'spend' (dollar amount) when user says '$X'. Use 'amount' only when user says 'X shares'. "+
-				"Load the 'polymarket-trading' skill for signing flow.",
+			"INTERNAL — do NOT call directly. Use polymarket_place_bet instead. "+
+				"Low-level: builds EIP-712 typed data payloads for a Polymarket order.",
 		),
 		mcp.WithString("token_id",
 			mcp.Description("CLOB token ID for the outcome to trade. Optional if event_slug + outcome are provided."),

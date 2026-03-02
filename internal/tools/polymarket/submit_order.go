@@ -19,12 +19,8 @@ const maxAuthAge = 5 * time.Minute
 func NewSubmitOrderTool() mcp.Tool {
 	return mcp.NewTool("polymarket_submit_order",
 		mcp.WithDescription(
-			"Submit a signed Polymarket order to the CLOB. "+
-				"Requires the signed order from polymarket_build_order + sign_typed_data. "+
-				"If auth was cached (auth_cached=true in build_order response), omit auth_signature — server reuses cached credentials. "+
-				"Otherwise pass auth_signature to derive new credentials. "+
-				"Pass order_ref from build_order to avoid manual data threading (recommended). "+
-				"Returns order ID and fill status.",
+			"INTERNAL — do NOT call directly. Used by backend auto-submit after signing. "+
+				"Submits a signed Polymarket order to the CLOB.",
 		),
 		mcp.WithString("order_ref",
 			mcp.Description("REQUIRED. The exact order_ref string returned by polymarket_build_order (e.g. 'ord_1740912030123456789'). MUST be copied verbatim — NEVER fabricate or invent an order_ref. Server uses it to retrieve all order data."),
@@ -175,10 +171,7 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 			// Already "BUY"/"SELL" — keep as-is
 		}
 
-		// Debug: log the order message before submission
-		orderDebug, _ := json.Marshal(orderMsg)
-		log.Printf("[submit_order] orderMsg=%s", string(orderDebug))
-		log.Printf("[submit_order] orderType=%s owner=%s", orderType, creds.Key)
+		log.Printf("[submit_order] submitting orderType=%s side=%v tokenId=%v", orderType, orderMsg["side"], orderMsg["tokenId"])
 
 		// Build CLOB order payload
 		payload := map[string]any{

@@ -24,6 +24,6 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool) 
 	s.AddTool(NewSubmitOrderTool(), HandleSubmitOrder(pmClient, orderStore, authCache))
 	s.AddTool(NewCheckApprovalsTool(), HandleCheckApprovals(store, pool))
 	s.AddTool(NewPlaceBetTool(), HandlePlaceBet(pmClient, store, pool, orderStore, authCache))
-	s.AddTool(NewCancelOrderTool(), HandleCancelOrder(pmClient, authCache))
-	s.AddTool(NewOpenOrdersTool(), HandleOpenOrders(pmClient, authCache))
+	s.AddTool(NewCancelOrderTool(), HandleCancelOrder(pmClient, authCache, store))
+	s.AddTool(NewOpenOrdersTool(), HandleOpenOrders(pmClient, authCache, store))
 }

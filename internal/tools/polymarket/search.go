@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxSearchResults   = 5
+	maxSearchResults   = 10
 	maxMarketsPerEvent = 5
 )
 
@@ -22,7 +22,7 @@ func NewSearchTool() mcp.Tool {
 	return mcp.NewTool("polymarket_search",
 		mcp.WithDescription(
 			"Search for Polymarket prediction markets by topic or keyword. "+
-				"Returns top 5 events with their tradeable markets, prices, CLOB token IDs, and volume. "+
+				"Full-text search — returns up to 10 relevant events with tradeable markets, prices, CLOB token IDs, and volume. "+
 				"Use question_contains to find a specific outcome within large events (e.g. 'Rubio' in a 100-outcome presidential market). "+
 				"Results include everything needed for polymarket_place_bet — no need to call polymarket_market_info separately. "+
 				"Load the 'polymarket-trading' skill before placing any trades.",

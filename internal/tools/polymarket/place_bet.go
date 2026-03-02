@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"golang.org/x/sync/errgroup"
 
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	pm "github.com/vultisig/mcp/internal/polymarket"
@@ -50,7 +51,7 @@ func NewPlaceBetTool() mcp.Tool {
 			mcp.Description("Number of shares. Mutually exclusive with spend."),
 		),
 		mcp.WithString("order_type",
-			mcp.Description("Order type: GTC (default), GTD, FOK, FAK."),
+			mcp.Description("Order type: FAK (default — partial fill OK, unfilled remainder cancelled), GTC (limit order on the book), FOK (all-or-nothing), GTD."),
 		),
 		mcp.WithString("address",
 			mcp.Description("Maker address (0x-prefixed). Optional if vault info is set."),
@@ -80,7 +81,7 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 		outcomeText, _ := req.RequireString("outcome")
 		sideStr, _ := req.RequireString("side")
 		price, _ := req.RequireString("price")
-		orderType := req.GetString("order_type", "GTC")
+		orderType := req.GetString("order_type", "FAK")
 
 		if eventSlug == "" || outcomeText == "" || sideStr == "" || price == "" {
 			return mcp.NewToolResultError("event_slug, outcome, side, and price are required"), nil
@@ -108,7 +109,7 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 				return mcp.NewToolResultError("price must be > 0 to calculate shares from spend"), nil
 			}
 			shares := spendF / priceF
-			amount = strconv.FormatFloat(shares, 'f', 2, 64)
+			amount = strconv.FormatFloat(shares, 'f', 6, 64)
 		} else {
 			amount = amountStr
 		}
@@ -163,20 +164,33 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 			}
 		}
 
-		// Fetch market metadata
-		tickSize, err := pmClient.GetTickSize(ctx, tokenID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf(
-				"Token ID %s is not tradable on the CLOB (market may be closed or have no liquidity). "+
-					"Use polymarket_search to find active markets. Error: %v",
-				tokenID, err)), nil
+		// Fetch market metadata (parallel)
+		var tickSize, feeRate string
+		var negRisk bool
+		var tickErr, negErr error
+		g, gctx := errgroup.WithContext(ctx)
+		g.Go(func() error {
+			tickSize, tickErr = pmClient.GetTickSize(gctx, tokenID)
+			return tickErr
+		})
+		g.Go(func() error {
+			negRisk, negErr = pmClient.GetNegRisk(gctx, tokenID)
+			return negErr
+		})
+		g.Go(func() error {
+			feeRate, _ = pmClient.GetFeeRate(gctx, tokenID) // non-fatal
+			return nil
+		})
+		if err := g.Wait(); err != nil {
+			if tickErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"Token ID %s is not tradable on the CLOB (market may be closed or have no liquidity). "+
+						"Use polymarket_search to find active markets. Error: %v",
+					tokenID, tickErr)), nil
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("failed to get market metadata: %v", err)), nil
 		}
-		negRisk, err := pmClient.GetNegRisk(ctx, tokenID)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to get neg_risk: %v", err)), nil
-		}
-		feeRate, err := pmClient.GetFeeRate(ctx, tokenID)
-		if err != nil {
+		if feeRate == "" {
 			feeRate = "0"
 		}
 
@@ -185,6 +199,7 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 			Side:       side,
 			Price:      price,
 			Size:       amount,
+			Spend:      spendStr, // passed for FOK/FAK BUY — BuildOrder uses it as makerAmount base
 			OrderType:  pm.OrderType(strings.ToUpper(orderType)),
 			NegRisk:    negRisk,
 			TickSize:   tickSize,

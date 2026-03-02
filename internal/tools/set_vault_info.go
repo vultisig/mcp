@@ -12,7 +12,7 @@ import (
 
 func newSetVaultInfoTool() mcp.Tool {
 	return mcp.NewTool("set_vault_info",
-		mcp.WithDescription("Store vault key material (ECDSA public key, EdDSA public key, chain code) for the current session. Must be called before vault-derived balance queries."),
+		mcp.WithDescription("INTERNAL — called by the app to store vault key material. AI agents must NEVER call this tool — pass addresses explicitly instead."),
 		mcp.WithString("ecdsa_public_key",
 			mcp.Description("Hex-encoded compressed ECDSA public key (33 bytes / 66 hex chars)"),
 			mcp.Required(),

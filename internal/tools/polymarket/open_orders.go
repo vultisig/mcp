@@ -7,23 +7,25 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	pm "github.com/vultisig/mcp/internal/polymarket"
+	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewOpenOrdersTool() mcp.Tool {
 	return mcp.NewTool("polymarket_open_orders",
 		mcp.WithDescription(
 			"List open orders on Polymarket for the authenticated user. "+
-				"If auth credentials were cached from a previous build_order/submit_order, "+
-				"only address is needed. Otherwise pass auth_signature + auth_timestamp. "+
+				"If auth credentials were cached from a previous order, "+
+				"only address is needed (or omit to use vault). Otherwise pass auth_signature + auth_timestamp. "+
 				"Optionally filter by market.",
 		),
 		mcp.WithString("address",
-			mcp.Description("The maker's Polygon address (0x-prefixed)."),
-			mcp.Required(),
+			mcp.Description("The maker's Polygon address (0x-prefixed). Optional if vault info is set."),
 		),
 		mcp.WithString("auth_signature",
 			mcp.Description("EIP-712 auth signature for CLOB access (0x-prefixed hex). Optional if auth was cached from a prior order."),
@@ -37,15 +39,19 @@ func NewOpenOrdersTool() mcp.Tool {
 	)
 }
 
-func HandleOpenOrders(pmClient *pm.Client, authCache *pm.AuthCache) server.ToolHandlerFunc {
+func HandleOpenOrders(pmClient *pm.Client, authCache *pm.AuthCache, store *vault.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		address, _ := req.RequireString("address")
+		explicit := req.GetString("address", "")
 		authSig := req.GetString("auth_signature", "")
 		authTS := req.GetString("auth_timestamp", "")
 		market := req.GetString("market", "")
 
-		if address == "" {
-			return mcp.NewToolResultError("address is required"), nil
+		if explicit != "" && !common.IsHexAddress(explicit) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s", explicit)), nil
+		}
+		address, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		// Resolve API credentials: cached first, then derive
@@ -62,7 +68,35 @@ func HandleOpenOrders(pmClient *pm.Client, authCache *pm.AuthCache) server.ToolH
 			return mcp.NewToolResultText("No open orders found."), nil
 		}
 
-		data, err := json.Marshal(orders)
+		// Build summary without hash/sensitive fields (asset_id, owner, maker_address)
+		type orderSummary struct {
+			ID           string `json:"id"`
+			Side         string `json:"side"`
+			Outcome      string `json:"outcome"`
+			Price        string `json:"price"`
+			OriginalSize string `json:"original_size"`
+			SizeMatched  string `json:"size_matched"`
+			Status       string `json:"status"`
+			OrderType    string `json:"type"`
+			CreatedAt    string `json:"created_at"`
+		}
+
+		summaries := make([]orderSummary, len(orders))
+		for i, o := range orders {
+			summaries[i] = orderSummary{
+				ID:           o.ID,
+				Side:         o.Side,
+				Outcome:      o.Outcome,
+				Price:        o.Price,
+				OriginalSize: o.OriginalSize,
+				SizeMatched:  o.SizeMatched,
+				Status:       o.Status,
+				OrderType:    o.OrderType,
+				CreatedAt:    o.CreatedAt.String(),
+			}
+		}
+
+		data, err := json.Marshal(summaries)
 		if err != nil {
 			return nil, fmt.Errorf("marshal open orders: %w", err)
 		}
@@ -80,7 +114,7 @@ func resolveAuthCreds(ctx context.Context, pmClient *pm.Client, authCache *pm.Au
 
 	// Need auth signature to derive
 	if authSig == "" {
-		return nil, fmt.Errorf("no cached auth credentials for this address. Place an order first (polymarket_build_order → sign → submit) to cache auth, or provide auth_signature + auth_timestamp")
+		return nil, fmt.Errorf("no cached auth credentials for this address. Place an order first (polymarket_place_bet → sign) to cache auth, or provide auth_signature + auth_timestamp")
 	}
 	if authTS == "" {
 		return nil, fmt.Errorf("auth_signature provided but auth_timestamp is missing")

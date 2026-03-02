@@ -39,14 +39,15 @@ const (
 
 // OrderParams holds the user-facing parameters for building an order.
 type OrderParams struct {
-	TokenID   string
-	Side      Side
-	Price     string
-	Size      string
-	OrderType OrderType
-	Expiry    int64 // Unix timestamp, only for GTD
-	NegRisk   bool
-	TickSize  string
+	TokenID    string
+	Side       Side
+	Price      string
+	Size       string    // Number of shares (always required)
+	Spend      string    // Dollar amount — for FOK/FAK BUY, used as makerAmount base instead of price×size
+	OrderType  OrderType
+	Expiry     int64 // Unix timestamp, only for GTD
+	NegRisk    bool
+	TickSize   string
 	FeeRateBps string
 }
 
@@ -111,6 +112,84 @@ func (c *AuthCache) Get(address string) (*ApiCreds, bool) {
 	return c.cache.get(strings.ToLower(address))
 }
 
+// roundConfig mirrors py-clob-client's ROUNDING_CONFIG.
+// price: decimal places for price, size: for base qty (always 2), amount: for derived qty.
+type roundConfig struct {
+	price, size, amount int
+}
+
+var roundingConfig = map[string]roundConfig{
+	"0.1":    {price: 1, size: 2, amount: 3},
+	"0.01":   {price: 2, size: 2, amount: 4},
+	"0.001":  {price: 3, size: 2, amount: 5},
+	"0.0001": {price: 4, size: 2, amount: 6},
+}
+
+func getRoundConfig(tickSize string) roundConfig {
+	if rc, ok := roundingConfig[tickSize]; ok {
+		return rc
+	}
+	// Fallback: derive from tick size string
+	dec := tickSizeDecimals(tickSize)
+	if dec == 0 {
+		dec = 2
+	}
+	return roundConfig{price: dec, size: 2, amount: dec + 2}
+}
+
+func tickSizeDecimals(tickSize string) int {
+	if idx := strings.IndexByte(tickSize, '.'); idx >= 0 {
+		return len(strings.TrimRight(tickSize[idx+1:], "0"))
+	}
+	return 0
+}
+
+func roundNormal(f float64, n int) float64 {
+	pow := math.Pow10(n)
+	return math.Round(f*pow) / pow
+}
+
+func roundDown(f float64, n int) float64 {
+	pow := math.Pow10(n)
+	return math.Floor(f*pow) / pow
+}
+
+func roundUp(f float64, n int) float64 {
+	pow := math.Pow10(n)
+	return math.Ceil(f*pow) / pow
+}
+
+// decimalPlaces returns the number of decimal places in f's string representation.
+func decimalPlaces(f float64) int {
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		return len(s) - i - 1
+	}
+	return 0
+}
+
+// conditionalRound applies py-clob-client's rounding strategy:
+// try round_up with extra precision first, fall back to round_down.
+func conditionalRound(val float64, maxDec int) float64 {
+	if decimalPlaces(val) <= maxDec {
+		return val
+	}
+	val = roundUp(val, maxDec+4)
+	if decimalPlaces(val) > maxDec {
+		val = roundDown(val, maxDec)
+	}
+	return val
+}
+
+// toTokenDecimals converts a human-readable amount to atomic units (×1e6).
+func toTokenDecimals(f float64) *big.Int {
+	v := f * 1e6
+	if decimalPlaces(v) > 0 {
+		v = roundNormal(v, 0)
+	}
+	return new(big.Int).SetInt64(int64(v))
+}
+
 // BuildOrder constructs EIP-712 payloads for both the order and L1 auth.
 func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 	priceF, err := strconv.ParseFloat(params.Price, 64)
@@ -122,22 +201,42 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 		return nil, fmt.Errorf("invalid size: %s", params.Size)
 	}
 
-	// Round price to tick size (CLOB rejects amounts that don't align)
-	tickF, _ := strconv.ParseFloat(params.TickSize, 64)
-	if tickF > 0 {
-		priceF = math.Round(priceF/tickF) * tickF
+	rc := getRoundConfig(params.TickSize)
+
+	// Round price to tick precision
+	priceF = roundNormal(priceF, rc.price)
+
+	// Compute maker/taker amounts following py-clob-client's exact rounding rules:
+	// - "base" quantity → round_down to rc.size (always 2) decimal places
+	// - "derived" quantity → conditional round to rc.amount decimal places
+	//
+	// Limit BUY:  base=shares(taker), derived=price×shares(maker)
+	// Limit SELL: base=shares(maker), derived=price×shares(taker)
+	// Market BUY (FOK/FAK with spend): base=spend(maker), derived=spend/price(taker)
+	// Market SELL (FOK/FAK): base=shares(maker), derived=price×shares(taker)
+	isMarketOrder := params.OrderType == FOK || params.OrderType == FAK
+
+	var rawMaker, rawTaker float64
+	if isMarketOrder && params.Side == Buy && params.Spend != "" {
+		// Market BUY: USDC spend is the base, shares are derived
+		spendF, _ := strconv.ParseFloat(params.Spend, 64)
+		rawMaker = roundDown(spendF, rc.size)
+		rawTaker = rawMaker / priceF
+		rawTaker = conditionalRound(rawTaker, rc.amount)
+	} else if params.Side == Buy {
+		// Limit BUY: shares are the base, USDC is derived
+		rawTaker = roundDown(sizeF, rc.size)
+		rawMaker = rawTaker * priceF
+		rawMaker = conditionalRound(rawMaker, rc.amount)
+	} else {
+		// SELL (both limit and market): shares are the base, USDC is derived
+		rawMaker = roundDown(sizeF, rc.size)
+		rawTaker = rawMaker * priceF
+		rawTaker = conditionalRound(rawTaker, rc.amount)
 	}
 
-	// Compute maker/taker amounts as integers (USDC.e has 6 decimals).
-	// Use math.Round to avoid float truncation artifacts.
-	var makerAmount, takerAmount *big.Int
-	if params.Side == Buy {
-		makerAmount = new(big.Int).SetInt64(int64(math.Round(priceF * sizeF * 1e6)))
-		takerAmount = new(big.Int).SetInt64(int64(math.Round(sizeF * 1e6)))
-	} else {
-		makerAmount = new(big.Int).SetInt64(int64(math.Round(sizeF * 1e6)))
-		takerAmount = new(big.Int).SetInt64(int64(math.Round(priceF * sizeF * 1e6)))
-	}
+	makerAmount := toTokenDecimals(rawMaker)
+	takerAmount := toTokenDecimals(rawTaker)
 
 	// Determine exchange contract
 	exchange := CTFExchangeAddress

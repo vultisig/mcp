@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -63,7 +64,8 @@ func (c *Client) doGet(ctx context.Context, baseURL, path string) ([]byte, error
 	return io.ReadAll(resp.Body)
 }
 
-// SearchEvents searches for prediction market events via Gamma API.
+// SearchEvents searches for prediction market events via the Gamma public-search API.
+// Uses full-text relevance search rather than title substring matching.
 func (c *Client) SearchEvents(ctx context.Context, query string, activeOnly bool) ([]Event, error) {
 	cacheKey := query + fmt.Sprintf(":%v", activeOnly)
 	if cached, ok := c.eventCache.get(cacheKey); ok {
@@ -71,27 +73,26 @@ func (c *Client) SearchEvents(ctx context.Context, query string, activeOnly bool
 	}
 
 	params := url.Values{}
-	params.Set("title_like", query)
-	params.Set("limit", "10")
-	params.Set("order", "volume")
-	params.Set("ascending", "false")
+	params.Set("q", query)
+	params.Set("limit_per_type", "20")
 	if activeOnly {
-		params.Set("active", "true")
-		params.Set("closed", "false")
+		params.Set("events_status", "active")
 	}
 
-	body, err := c.doGet(ctx, c.gammaURL, "/events?"+params.Encode())
+	body, err := c.doGet(ctx, c.gammaURL, "/public-search?"+params.Encode())
 	if err != nil {
 		return nil, err
 	}
 
-	var events []Event
-	if err := json.Unmarshal(body, &events); err != nil {
-		return nil, fmt.Errorf("polymarket: decode events: %w", err)
+	var resp struct {
+		Events []Event `json:"events"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("polymarket: decode search results: %w", err)
 	}
 
-	c.eventCache.set(cacheKey, events)
-	return events, nil
+	c.eventCache.set(cacheKey, resp.Events)
+	return resp.Events, nil
 }
 
 // slugYearPrefix matches slugs like "2028-some-topic".
@@ -122,7 +123,52 @@ func (c *Client) GetEvent(ctx context.Context, slug string) (*Event, error) {
 		}
 	}
 
+	// Fuzzy fallback: search to find correct slugs for the error message
+	query := slugToSearchQuery(slug)
+	events, searchErr := c.SearchEvents(ctx, query, true)
+	if searchErr == nil && len(events) > 0 {
+		// Exact match in search results — safe to auto-resolve
+		for i, e := range events {
+			if e.Slug == slug {
+				return &events[i], nil
+			}
+		}
+		// NOT exact match — suggest, let LLM ask user to confirm
+		suggestions := make([]string, 0, min(3, len(events)))
+		for i, e := range events {
+			if i >= 3 {
+				break
+			}
+			suggestions = append(suggestions, fmt.Sprintf("%s (%s)", e.Slug, e.Title))
+		}
+		return nil, fmt.Errorf("polymarket: event %q not found. Similar events found — ask the user which one they mean: %s",
+			slug, strings.Join(suggestions, "; "))
+	}
+
 	return nil, err
+}
+
+// slugToSearchQuery converts a slug to a search query by replacing hyphens
+// with spaces and dropping common stop words.
+func slugToSearchQuery(slug string) string {
+	words := strings.Split(slug, "-")
+	stop := map[string]bool{
+		"will": true, "the": true, "be": true, "is": true,
+		"a": true, "an": true, "of": true, "in": true,
+		"on": true, "at": true, "to": true, "for": true,
+		"and": true, "or": true, "as": true, "by": true,
+	}
+	var significant []string
+	for _, w := range words {
+		if len(w) < 3 || stop[w] {
+			continue
+		}
+		significant = append(significant, w)
+	}
+	if len(significant) == 0 {
+		return strings.ReplaceAll(slug, "-", " ")
+	}
+	return strings.Join(significant, " ")
 }
 
 func (c *Client) getEventBySlug(ctx context.Context, slug string) (*Event, error) {

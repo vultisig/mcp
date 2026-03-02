@@ -55,7 +55,29 @@ func HandleTrades(pmClient *pm.Client, store *vault.Store) server.ToolHandlerFun
 			return mcp.NewToolResultText(fmt.Sprintf("No Polymarket trades found for %s", addr)), nil
 		}
 
-		data, err := json.Marshal(trades)
+		// Build summary without hash fields (id, market, asset) to save LLM tokens
+		type tradeSummary struct {
+			Side      string `json:"side"`
+			Outcome   string `json:"outcome"`
+			Price     string `json:"price"`
+			Size      string `json:"size"`
+			Timestamp string `json:"timestamp"`
+			Status    string `json:"status"`
+		}
+
+		summaries := make([]tradeSummary, len(trades))
+		for i, t := range trades {
+			summaries[i] = tradeSummary{
+				Side:      t.Side,
+				Outcome:   t.Outcome,
+				Price:     t.Price,
+				Size:      t.Size,
+				Timestamp: t.Timestamp,
+				Status:    t.Status,
+			}
+		}
+
+		data, err := json.Marshal(summaries)
 		if err != nil {
 			return nil, fmt.Errorf("marshal trades: %w", err)
 		}

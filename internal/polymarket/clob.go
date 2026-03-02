@@ -129,7 +129,7 @@ func (c *Client) GetFeeRate(ctx context.Context, tokenID string) (string, error)
 	if feeStr == "" {
 		feeStr = "0"
 	}
-	log.Printf("[polymarket] GetFeeRate for %s: %s bps (raw response: %s)", tokenID, feeStr, string(body))
+	log.Printf("[polymarket] GetFeeRate for %s: %s bps", tokenID, feeStr)
 	return feeStr, nil
 }
 
@@ -148,7 +148,7 @@ func (c *Client) UpdateBalanceAllowance(ctx context.Context, address string, cre
 		log.Printf("[polymarket] UpdateBalanceAllowance failed for %s (%s): %v", address, assetType, err)
 		return err
 	}
-	log.Printf("[polymarket] UpdateBalanceAllowance succeeded for %s (%s, sigType=%d)", address, assetType, sigType)
+	// Success — no log needed (called on every order)
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (c *Client) authenticatedPost(ctx context.Context, address string, creds *A
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	log.Printf("[polymarket] POST %s address=%s apiKey=%s payload=%s", path, address, creds.Key, string(data))
+	log.Printf("[polymarket] POST %s address=%s", path, address)
 
 	headers := BuildL2Headers(address, *creds, "POST", path, string(data))
 

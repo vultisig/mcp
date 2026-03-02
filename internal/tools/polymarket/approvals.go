@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"golang.org/x/sync/errgroup"
 
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	pm "github.com/vultisig/mcp/internal/polymarket"
@@ -81,60 +82,77 @@ func HandleCheckApprovals(store *vault.Store, pool *evmclient.Pool) server.ToolH
 		}
 
 		zero := new(big.Int)
-		var missing []approvalAction
 
-		// USDC.e approvals (needed for BUY and SELL)
-		usdcSpenders := []struct {
-			addr  string
-			label string
-		}{
-			{pm.CTFExchangeAddress, "CTF Exchange"},
-			{pm.NegRiskCTFExchangeAddress, "NegRisk CTF Exchange"},
-			{pm.NegRiskAdapterAddress, "NegRisk Adapter"},
+		// Check all 6 approvals in parallel (3 USDC.e + 3 Conditional Token)
+		type spenderCheck struct {
+			addr, label, contract, fn string
+			isERC1155                  bool
+		}
+		checks := []spenderCheck{
+			{pm.CTFExchangeAddress, "CTF Exchange", pm.USDCeAddress, "approve", false},
+			{pm.NegRiskCTFExchangeAddress, "NegRisk CTF Exchange", pm.USDCeAddress, "approve", false},
+			{pm.NegRiskAdapterAddress, "NegRisk Adapter", pm.USDCeAddress, "approve", false},
+			{pm.CTFExchangeAddress, "CTF Exchange", pm.ConditionalTokensAddress, "setApprovalForAll", true},
+			{pm.NegRiskCTFExchangeAddress, "NegRisk CTF Exchange", pm.ConditionalTokensAddress, "setApprovalForAll", true},
+			{pm.NegRiskAdapterAddress, "NegRisk Adapter", pm.ConditionalTokensAddress, "setApprovalForAll", true},
 		}
 
-		for _, sp := range usdcSpenders {
-			allowance, _, _, err := client.GetAllowance(ctx, pm.USDCeAddress, addr, sp.addr)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to check allowance for %s: %v", sp.label, err)), nil
+		type checkResult struct {
+			index   int
+			missing bool
+		}
+		results := make([]checkResult, len(checks))
+		g, gctx := errgroup.WithContext(ctx)
+
+		for i, ch := range checks {
+			g.Go(func() error {
+				var isMissing bool
+				if ch.isERC1155 {
+					approved, err := client.IsApprovedForAll(gctx, ch.contract, addr, ch.addr)
+					isMissing = err != nil || !approved
+				} else {
+					allowance, _, _, err := client.GetAllowance(gctx, ch.contract, addr, ch.addr)
+					if err != nil {
+						return fmt.Errorf("check allowance for %s: %w", ch.label, err)
+					}
+					isMissing = allowance.Cmp(zero) <= 0
+				}
+				results[i] = checkResult{index: i, missing: isMissing}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to check approvals: %v", err)), nil
+		}
+
+		var missing []approvalAction
+		for i, r := range results {
+			if !r.missing {
+				continue
 			}
-			if allowance.Cmp(zero) <= 0 {
+			ch := checks[i]
+			if ch.isERC1155 {
 				missing = append(missing, approvalAction{
-					Label:           "Approve USDC.e for " + sp.label,
+					Label:           "Approve Conditional Tokens for " + ch.label,
 					TxType:          "evm_contract",
 					Chain:           "Polygon",
-					ContractAddress: pm.USDCeAddress,
-					FunctionName:    "approve",
+					ContractAddress: ch.contract,
+					FunctionName:    ch.fn,
 					Params: []actionParam{
-						{Type: "address", Value: sp.addr},
-						{Type: "uint256", Value: maxUint256},
+						{Type: "address", Value: ch.addr},
+						{Type: "bool", Value: "true"},
 					},
 				})
-			}
-		}
-
-		// Conditional Tokens ERC-1155 approvals (needed for selling, but granted upfront as one-time setup)
-		ctOperators := []struct {
-			addr  string
-			label string
-		}{
-			{pm.CTFExchangeAddress, "CTF Exchange"},
-			{pm.NegRiskCTFExchangeAddress, "NegRisk CTF Exchange"},
-			{pm.NegRiskAdapterAddress, "NegRisk Adapter"},
-		}
-
-		for _, op := range ctOperators {
-			approved, err := client.IsApprovedForAll(ctx, pm.ConditionalTokensAddress, addr, op.addr)
-			if err != nil || !approved {
+			} else {
 				missing = append(missing, approvalAction{
-					Label:           "Approve Conditional Tokens for " + op.label,
+					Label:           "Approve USDC.e for " + ch.label,
 					TxType:          "evm_contract",
 					Chain:           "Polygon",
-					ContractAddress: pm.ConditionalTokensAddress,
-					FunctionName:    "setApprovalForAll",
+					ContractAddress: ch.contract,
+					FunctionName:    ch.fn,
 					Params: []actionParam{
-						{Type: "address", Value: op.addr},
-						{Type: "bool", Value: "true"},
+						{Type: "address", Value: ch.addr},
+						{Type: "uint256", Value: maxUint256},
 					},
 				})
 			}

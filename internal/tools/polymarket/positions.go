@@ -49,21 +49,44 @@ func HandlePositions(pmClient *pm.Client, store *vault.Store) server.ToolHandler
 			return mcp.NewToolResultText(fmt.Sprintf("No Polymarket positions found for %s", addr)), nil
 		}
 
-		for i := range positions {
-			size, _ := positions[i].Size.Float64()
-			curPrice, _ := positions[i].CurPrice.Float64()
-			avgPrice, _ := positions[i].AvgPrice.Float64()
+		// Build summary without hash fields (asset, conditionId, market) to save LLM tokens
+		type positionSummary struct {
+			Title        string `json:"title"`
+			EventSlug    string `json:"event_slug"`
+			Outcome      string `json:"outcome"`
+			Size         string `json:"size"`
+			AvgPrice     string `json:"avg_price"`
+			CurPrice     string `json:"cur_price"`
+			CurrentValue string `json:"current_value"`
+			RealizedPnl  string `json:"realized_pnl"`
+			PnlPercent   string `json:"pnl_percent"`
+		}
 
-			positions[i].CurrentValue = json.Number(fmt.Sprintf("%.2f", size*curPrice))
+		summaries := make([]positionSummary, len(positions))
+		for i, p := range positions {
+			size, _ := p.Size.Float64()
+			curPrice, _ := p.CurPrice.Float64()
+			avgPrice, _ := p.AvgPrice.Float64()
 
+			var pnlPct float64
 			if avgPrice > 0 {
-				positions[i].PnlPercent = json.Number(fmt.Sprintf("%.2f", ((curPrice-avgPrice)/avgPrice)*100))
-			} else {
-				positions[i].PnlPercent = json.Number("0")
+				pnlPct = ((curPrice - avgPrice) / avgPrice) * 100
+			}
+
+			summaries[i] = positionSummary{
+				Title:        p.Title,
+				EventSlug:    p.EventSlug,
+				Outcome:      p.Outcome,
+				Size:         p.Size.String(),
+				AvgPrice:     p.AvgPrice.String(),
+				CurPrice:     p.CurPrice.String(),
+				CurrentValue: fmt.Sprintf("%.2f", size*curPrice),
+				RealizedPnl:  p.RealizedPnl.String(),
+				PnlPercent:   fmt.Sprintf("%.2f", pnlPct),
 			}
 		}
 
-		data, err := json.Marshal(positions)
+		data, err := json.Marshal(summaries)
 		if err != nil {
 			return nil, fmt.Errorf("marshal positions: %w", err)
 		}

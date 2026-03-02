@@ -29,7 +29,7 @@ func EVMAddress(explicit, sessionID string, store *vault.Store) (string, error) 
 
 	v, ok := store.Get(sessionID)
 	if !ok {
-		return "", fmt.Errorf("no address provided and no vault info set for this session — call set_vault_info first")
+		return "", fmt.Errorf("no address provided and no vault info set. Pass the user's address explicitly via the 'address' parameter (from wallet context) — do NOT call set_vault_info")
 	}
 
 	addr, _, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Ethereum)
@@ -49,7 +49,7 @@ func ChainAddress(explicit, sessionID string, store *vault.Store, chainName stri
 
 	v, ok := store.Get(sessionID)
 	if !ok {
-		return "", fmt.Errorf("no address provided and no vault info set for this session — call set_vault_info first")
+		return "", fmt.Errorf("no address provided and no vault info set. Pass the user's address explicitly via the 'address' parameter (from wallet context) — do NOT call set_vault_info")
 	}
 
 	chain, err := common.FromString(chainName)
