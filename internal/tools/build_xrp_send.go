@@ -81,7 +81,11 @@ func handleBuildXRPSend(store *vault.Store, xrpClient *xrpclient.Client) server.
 			if !addresscodec.IsValidClassicAddress(explicit) {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid sender XRP address: %q", explicit)), nil
 			}
-			senderAddr = explicit
+			if explicit != senderAddr {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"explicit from address %q does not match vault-derived address %q — "+
+						"SigningPubKey can only be derived from the current vault", explicit, senderAddr)), nil
+			}
 		}
 
 		info, err := xrpClient.GetAccountInfo(ctx, senderAddr)
