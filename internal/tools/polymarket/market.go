@@ -69,10 +69,13 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 		}
 
 		if slug != "" {
-			event, err := pmClient.GetEvent(ctx, slug)
+			eventPtr, err := pmClient.GetEvent(ctx, slug)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("event lookup failed: %v", err)), nil
 			}
+			// Copy to avoid mutating cached event from SearchEvents fallback
+			eventCopy := *eventPtr
+			event := &eventCopy
 			event.Description = truncateDescription(event.Description)
 
 			tradable := make([]pm.Market, 0, len(event.Markets))
@@ -106,17 +109,11 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 				offset = 0
 			}
 			limit := int(req.GetFloat("limit", defaultMarketsPageSize))
-			if limit <= 0 {
+			if limit < 1 {
 				limit = defaultMarketsPageSize
 			}
 
 			total := len(event.Markets)
-			if offset < 0 {
-				offset = 0
-			}
-			if limit < 1 {
-				limit = defaultMarketsPageSize
-			}
 			if offset >= total {
 				event.Markets = nil
 			} else {
