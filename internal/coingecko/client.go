@@ -161,7 +161,9 @@ func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error)
 // GetSimplePrice fetches USD price, 24h change, and market cap for a single
 // CoinGecko coin ID. Results are cached for 1 minute.
 func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, error) {
-	if cached, ok := c.priceCache.get("simple:" + id); ok {
+	id = strings.ToLower(strings.TrimSpace(id))
+	cacheKey := "simple:" + id
+	if cached, ok := c.priceCache.get(cacheKey); ok {
 		return &cached, nil
 	}
 
@@ -189,7 +191,7 @@ func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, err
 		return nil, fmt.Errorf("coingecko: no price data for %q", id)
 	}
 
-	c.priceCache.set("simple:"+id, pd)
+	c.priceCache.set(cacheKey, pd)
 	return &pd, nil
 }
 

@@ -115,7 +115,10 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 			} else {
 				// Search CoinGecko to get proper name/symbol.
 				coins, searchErr := cgClient.Search(ctx, token)
-				if searchErr == nil && len(coins) > 0 {
+				if searchErr != nil {
+					return mcp.NewToolResultError(fmt.Sprintf("token search failed for %q: %v", token, searchErr)), nil
+				}
+				if len(coins) > 0 {
 					pd, err = cgClient.GetSimplePrice(ctx, coins[0].ID)
 					if err != nil {
 						return mcp.NewToolResultError(fmt.Sprintf("price lookup failed for %q: %v", coins[0].ID, err)), nil
@@ -147,6 +150,9 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 			amount, parseErr := strconv.ParseFloat(amountStr, 64)
 			if parseErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid amount %q: %v", amountStr, parseErr)), nil
+			}
+			if amount < 0 {
+				return mcp.NewToolResultError("amount must be non-negative"), nil
 			}
 			value := amount * pd.USD
 			resp += fmt.Sprintf("\nAmount: %s\nValue: $%s", amountStr, formatUSD(value))
