@@ -258,7 +258,7 @@ var ErrTxNotFound = fmt.Errorf("transaction not found")
 // TxStatus holds transaction confirmation info.
 type TxStatus struct {
 	Slot          uint64
-	Status        string // "confirmed", "failed"
+	Status        string // "processed", "confirmed", "finalized", "failed"
 	Err           string
 	Confirmations *uint64
 }
@@ -270,7 +270,7 @@ func (c *Client) GetTransactionStatus(ctx context.Context, signature string) (*T
 		return nil, fmt.Errorf("invalid Solana signature: %w", err)
 	}
 
-	statuses, err := c.rpc.GetSignatureStatuses(ctx, false, sig)
+	statuses, err := c.rpc.GetSignatureStatuses(ctx, true, sig)
 	if err != nil {
 		return nil, fmt.Errorf("get signature status: %w", err)
 	}
@@ -282,7 +282,7 @@ func (c *Client) GetTransactionStatus(ctx context.Context, signature string) (*T
 	s := statuses.Value[0]
 	result := &TxStatus{
 		Slot:   s.Slot,
-		Status: "confirmed",
+		Status: string(s.ConfirmationStatus),
 	}
 
 	if s.Confirmations != nil {

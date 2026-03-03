@@ -33,7 +33,7 @@ func newGetTxStatusTool() mcp.Tool {
 	for c := range blockchair.SupportedChains {
 		allChains = append(allChains, c)
 	}
-	allChains = append(allChains, "Solana", "Ripple")
+	allChains = append(allChains, "Solana", "Ripple", "XRP")
 	sort.Strings(allChains)
 
 	return mcp.NewTool("get_tx_status",
@@ -123,6 +123,19 @@ func getEVMTxStatus(ctx context.Context, pool *evmclient.Pool, chain, txHash str
 	receipt, err := client.ETH().TransactionReceipt(ctx, hash)
 	if err != nil {
 		if err == ethereum.NotFound {
+			// Check if the tx is pending in the mempool.
+			tx, isPending, txErr := client.ETH().TransactionByHash(ctx, hash)
+			if txErr == nil && tx != nil && isPending {
+				res := &txStatusResult{
+					Chain:  chain,
+					TxHash: txHash,
+					Status: "pending",
+				}
+				if tx.To() != nil {
+					res.To = tx.To().Hex()
+				}
+				return res, nil
+			}
 			return &txStatusResult{
 				Chain:  chain,
 				TxHash: txHash,
@@ -211,14 +224,20 @@ func getUTXOTxStatus(ctx context.Context, bcClient *blockchair.Client, chain, tx
 
 	feeFormatted := blockchair.FormatSatoshis(tx.Fee, info.Decimals) + " " + info.Ticker
 
-	return &txStatusResult{
-		Chain:       chain,
-		TxHash:      txHash,
-		Status:      status,
-		Success:     success,
-		BlockNumber: tx.BlockID,
-		Fee:         feeFormatted,
-	}, nil
+	res := &txStatusResult{
+		Chain:   chain,
+		TxHash:  txHash,
+		Status:  status,
+		Success: success,
+		Fee:     feeFormatted,
+	}
+	if tx.BlockID >= 0 {
+		res.BlockNumber = tx.BlockID
+	}
+	if tx.Confirmations > 0 {
+		res.Confirmations = uint64(tx.Confirmations)
+	}
+	return res, nil
 }
 
 func getSolanaTxStatus(ctx context.Context, solClient *solanaclient.Client, txHash string) (*txStatusResult, error) {
@@ -238,7 +257,7 @@ func getSolanaTxStatus(ctx context.Context, solClient *solanaclient.Client, txHa
 		Chain:   "Solana",
 		TxHash:  txHash,
 		Status:  status.Status,
-		Success: status.Status == "confirmed",
+		Success: status.Status == "confirmed" || status.Status == "finalized",
 	}
 	if status.Confirmations != nil {
 		result.Confirmations = *status.Confirmations

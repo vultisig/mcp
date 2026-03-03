@@ -198,9 +198,10 @@ func (c *Client) GetTransactionStatus(ctx context.Context, txHash string) (*TxSt
 	var ledger int64
 	if result.LedgerIndex.String() != "" {
 		l, err := strconv.ParseInt(result.LedgerIndex.String(), 10, 64)
-		if err == nil {
-			ledger = l
+		if err != nil {
+			return nil, fmt.Errorf("xrp: parse ledger index: %w", err)
 		}
+		ledger = l
 	}
 
 	return &TxStatus{
