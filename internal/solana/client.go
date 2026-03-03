@@ -252,12 +252,14 @@ func (c *Client) BuildTokenTransfer(
 	return txBytes, nil
 }
 
+// ErrTxNotFound is returned when a transaction signature cannot be found.
+var ErrTxNotFound = fmt.Errorf("transaction not found")
+
 // TxStatus holds transaction confirmation info.
 type TxStatus struct {
-	Slot        uint64
-	Fee         uint64
-	Status      string // "confirmed", "failed"
-	Err         string
+	Slot          uint64
+	Status        string // "confirmed", "failed"
+	Err           string
 	Confirmations *uint64
 }
 
@@ -274,7 +276,7 @@ func (c *Client) GetTransactionStatus(ctx context.Context, signature string) (*T
 	}
 
 	if statuses == nil || len(statuses.Value) == 0 || statuses.Value[0] == nil {
-		return nil, fmt.Errorf("transaction not found")
+		return nil, ErrTxNotFound
 	}
 
 	s := statuses.Value[0]
@@ -284,8 +286,8 @@ func (c *Client) GetTransactionStatus(ctx context.Context, signature string) (*T
 	}
 
 	if s.Confirmations != nil {
-		c := uint64(*s.Confirmations)
-		result.Confirmations = &c
+		conf := uint64(*s.Confirmations)
+		result.Confirmations = &conf
 	}
 
 	if s.Err != nil {

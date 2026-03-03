@@ -68,6 +68,9 @@ type feeDrops struct {
 	BaseFee string `json:"base_fee"`
 }
 
+// ErrTxNotFound is returned when a transaction hash cannot be found.
+var ErrTxNotFound = fmt.Errorf("transaction not found")
+
 func (c *Client) do(ctx context.Context, method string, param rpcParam) (*rpcResult, error) {
 	body, err := json.Marshal(rpcRequest{
 		Method: method,
@@ -103,6 +106,9 @@ func (c *Client) do(ctx context.Context, method string, param rpcParam) (*rpcRes
 	}
 
 	if rpcResp.Result.Error != "" {
+		if rpcResp.Result.Error == "txnNotFound" {
+			return nil, ErrTxNotFound
+		}
 		return nil, fmt.Errorf("xrp: %s — %s", rpcResp.Result.Error, rpcResp.Result.ErrorMessage)
 	}
 

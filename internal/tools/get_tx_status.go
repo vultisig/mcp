@@ -3,9 +3,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -24,28 +26,15 @@ var (
 	utxoTxHashRE = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 )
 
-// utxoChainSet is the set of UTXO chains supported via Blockchair.
-var utxoChainSet = map[string]bool{
-	"Bitcoin": true, "Bitcoin-Cash": true, "Litecoin": true,
-	"Dogecoin": true, "Dash": true, "Zcash": true,
-}
-
-// evmChainSet is the set of EVM chains supported via the pool.
-var evmChainSet = map[string]bool{
-	"Ethereum": true, "BSC": true, "Polygon": true, "Avalanche": true,
-	"Arbitrum": true, "Optimism": true, "Base": true, "Blast": true,
-	"Mantle": true, "Zksync": true,
-}
-
 func newGetTxStatusTool() mcp.Tool {
-	allChains := make([]string, 0, len(evmChainSet)+len(utxoChainSet)+2)
-	for c := range evmChainSet {
-		allChains = append(allChains, c)
-	}
-	for c := range utxoChainSet {
+	// Derive chain lists from canonical sources.
+	allChains := make([]string, 0, len(evmclient.EVMChains)+len(blockchair.SupportedChains)+2)
+	allChains = append(allChains, evmclient.EVMChains...)
+	for c := range blockchair.SupportedChains {
 		allChains = append(allChains, c)
 	}
 	allChains = append(allChains, "Solana", "Ripple")
+	sort.Strings(allChains)
 
 	return mcp.NewTool("get_tx_status",
 		mcp.WithDescription(
@@ -77,6 +66,12 @@ type txStatusResult struct {
 }
 
 func handleGetTxStatus(pool *evmclient.Pool, bcClient *blockchair.Client, solClient *solanaclient.Client, xrpClient *xrpclient.Client) server.ToolHandlerFunc {
+	// Build lookup sets from canonical sources at init time.
+	evmChainSet := make(map[string]bool, len(evmclient.EVMChains))
+	for _, c := range evmclient.EVMChains {
+		evmChainSet[c] = true
+	}
+
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		chain, err := req.RequireString("chain")
 		if err != nil {
@@ -92,7 +87,7 @@ func handleGetTxStatus(pool *evmclient.Pool, bcClient *blockchair.Client, solCli
 		switch {
 		case evmChainSet[chain]:
 			result, err = getEVMTxStatus(ctx, pool, chain, txHash)
-		case utxoChainSet[chain]:
+		case blockchair.SupportedChains[chain] != (blockchair.ChainInfo{}):
 			result, err = getUTXOTxStatus(ctx, bcClient, chain, txHash)
 		case chain == "Solana":
 			result, err = getSolanaTxStatus(ctx, solClient, txHash)
@@ -139,10 +134,10 @@ func getEVMTxStatus(ctx context.Context, pool *evmclient.Pool, chain, txHash str
 
 	ticker := evmclient.NativeTicker(chain)
 
-	// Calculate confirmations.
+	// Calculate confirmations (guard against underflow from reorgs).
 	latestBlock, blockErr := client.ETH().BlockNumber(ctx)
 	var confirmations uint64
-	if blockErr == nil && receipt.BlockNumber != nil {
+	if blockErr == nil && receipt.BlockNumber != nil && latestBlock >= receipt.BlockNumber.Uint64() {
 		confirmations = latestBlock - receipt.BlockNumber.Uint64()
 	}
 
@@ -208,8 +203,10 @@ func getUTXOTxStatus(ctx context.Context, bcClient *blockchair.Client, chain, tx
 	}
 
 	status := "confirmed"
+	success := true
 	if tx.BlockID == -1 {
 		status = "pending"
+		success = false
 	}
 
 	feeFormatted := blockchair.FormatSatoshis(tx.Fee, info.Decimals) + " " + info.Ticker
@@ -218,7 +215,7 @@ func getUTXOTxStatus(ctx context.Context, bcClient *blockchair.Client, chain, tx
 		Chain:       chain,
 		TxHash:      txHash,
 		Status:      status,
-		Success:     true,
+		Success:     success,
 		BlockNumber: tx.BlockID,
 		Fee:         feeFormatted,
 	}, nil
@@ -227,7 +224,7 @@ func getUTXOTxStatus(ctx context.Context, bcClient *blockchair.Client, chain, tx
 func getSolanaTxStatus(ctx context.Context, solClient *solanaclient.Client, txHash string) (*txStatusResult, error) {
 	status, err := solClient.GetTransactionStatus(ctx, txHash)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, solanaclient.ErrTxNotFound) {
 			return &txStatusResult{
 				Chain:  "Solana",
 				TxHash: txHash,
@@ -249,16 +246,13 @@ func getSolanaTxStatus(ctx context.Context, solClient *solanaclient.Client, txHa
 	if status.Slot > 0 {
 		result.BlockNumber = int64(status.Slot)
 	}
-	if status.Fee > 0 {
-		result.Fee = solanaclient.FormatLamports(status.Fee) + " SOL"
-	}
 	return result, nil
 }
 
 func getXRPTxStatus(ctx context.Context, xrpClient *xrpclient.Client, txHash string) (*txStatusResult, error) {
 	status, err := xrpClient.GetTransactionStatus(ctx, txHash)
 	if err != nil {
-		if strings.Contains(err.Error(), "txnNotFound") || strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, xrpclient.ErrTxNotFound) {
 			return &txStatusResult{
 				Chain:  "Ripple",
 				TxHash: txHash,
