@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,19 +16,21 @@ import (
 
 // nativeCoinGeckoID maps uppercase ticker symbols to CoinGecko coin IDs.
 var nativeCoinGeckoID = map[string]string{
-	"ETH":  "ethereum",
-	"BTC":  "bitcoin",
-	"SOL":  "solana",
-	"XRP":  "ripple",
-	"BNB":  "binancecoin",
+	"ETH":   "ethereum",
+	"BTC":   "bitcoin",
+	"SOL":   "solana",
+	"XRP":   "ripple",
+	"BNB":   "binancecoin",
 	"MATIC": "matic-network",
-	"AVAX": "avalanche-2",
-	"LTC":  "litecoin",
-	"DOGE": "dogecoin",
-	"BCH":  "bitcoin-cash",
-	"DASH": "dash",
-	"ZEC":  "zcash",
-	"RUNE": "thorchain",
+	"POL":   "matic-network",
+	"AVAX":  "avalanche-2",
+	"LTC":   "litecoin",
+	"DOGE":  "dogecoin",
+	"BCH":   "bitcoin-cash",
+	"DASH":  "dash",
+	"ZEC":   "zcash",
+	"RUNE":  "thorchain",
+	"MNT":   "mantle",
 }
 
 // chainToPlatform maps Vultisig chain names to CoinGecko asset-platform IDs.
@@ -100,7 +103,7 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 			tokenName = fmt.Sprintf("Token on %s", chain)
 
 		default:
-			// Try native ticker first (uppercase), then as CoinGecko ID, then search.
+			// Try native ticker first (uppercase).
 			upper := strings.ToUpper(token)
 			if cgID, ok := nativeCoinGeckoID[upper]; ok {
 				pd, err = cgClient.GetSimplePrice(ctx, cgID)
@@ -110,14 +113,9 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 				tokenSymbol = upper
 				tokenName = cgID
 			} else {
-				// Try as direct CoinGecko ID.
-				pd, err = cgClient.GetSimplePrice(ctx, strings.ToLower(token))
-				if err != nil {
-					// Fallback: search CoinGecko.
-					coins, searchErr := cgClient.Search(ctx, token)
-					if searchErr != nil || len(coins) == 0 {
-						return mcp.NewToolResultError(fmt.Sprintf("no token found for %q", token)), nil
-					}
+				// Search CoinGecko to get proper name/symbol.
+				coins, searchErr := cgClient.Search(ctx, token)
+				if searchErr == nil && len(coins) > 0 {
 					pd, err = cgClient.GetSimplePrice(ctx, coins[0].ID)
 					if err != nil {
 						return mcp.NewToolResultError(fmt.Sprintf("price lookup failed for %q: %v", coins[0].ID, err)), nil
@@ -125,6 +123,11 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 					tokenSymbol = strings.ToUpper(coins[0].Symbol)
 					tokenName = coins[0].Name
 				} else {
+					// Last resort: try as direct CoinGecko ID.
+					pd, err = cgClient.GetSimplePrice(ctx, strings.ToLower(token))
+					if err != nil {
+						return mcp.NewToolResultError(fmt.Sprintf("no token found for %q", token)), nil
+					}
 					tokenSymbol = strings.ToUpper(token)
 					tokenName = token
 				}
@@ -158,6 +161,7 @@ func chainPlatformNames() []string {
 	for name := range chainToPlatform {
 		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names
 }
 
