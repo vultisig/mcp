@@ -127,11 +127,15 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 				return mcp.NewToolResultError(fmt.Sprintf("invalid auth_timestamp: %v", err)), nil
 			}
 
-			age := time.Since(time.Unix(ts, 0))
+			authTime := time.Unix(ts, 0)
+			age := time.Since(authTime)
 			if age > maxAuthAge {
 				return mcp.NewToolResultError(fmt.Sprintf(
 					"auth_timestamp is %s old (max %s). Call polymarket_build_order again to get a fresh timestamp and re-sign.",
 					age.Round(time.Second), maxAuthAge)), nil
+			}
+			if age < -30*time.Second {
+				return mcp.NewToolResultError("auth_timestamp is in the future — check system clock"), nil
 			}
 
 			var err2 error
@@ -167,19 +171,29 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 		// The EIP-712 message uses uint8 for signing, but POST /order expects a string.
 		switch v := orderMsg["side"].(type) {
 		case float64:
-			if int(v) == 0 {
+			switch int(v) {
+			case 0:
 				orderMsg["side"] = "BUY"
-			} else {
+			case 1:
 				orderMsg["side"] = "SELL"
+			default:
+				return mcp.NewToolResultError(fmt.Sprintf("invalid side value: %v (expected 0=BUY or 1=SELL)", v)), nil
 			}
 		case int:
-			if v == 0 {
+			switch v {
+			case 0:
 				orderMsg["side"] = "BUY"
-			} else {
+			case 1:
 				orderMsg["side"] = "SELL"
+			default:
+				return mcp.NewToolResultError(fmt.Sprintf("invalid side value: %d (expected 0=BUY or 1=SELL)", v)), nil
 			}
 		case string:
-			// Already "BUY"/"SELL" — keep as-is
+			if v != "BUY" && v != "SELL" {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid side: %q (expected BUY or SELL)", v)), nil
+			}
+		default:
+			return mcp.NewToolResultError(fmt.Sprintf("invalid side type: %T", orderMsg["side"])), nil
 		}
 
 		log.Printf("[submit_order] submitting orderType=%s side=%v tokenId=%v", orderType, orderMsg["side"], orderMsg["tokenId"])

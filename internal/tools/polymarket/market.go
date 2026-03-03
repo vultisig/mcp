@@ -111,6 +111,12 @@ func HandleMarketInfo(pmClient *pm.Client) server.ToolHandlerFunc {
 			}
 
 			total := len(event.Markets)
+			if offset < 0 {
+				offset = 0
+			}
+			if limit < 1 {
+				limit = defaultMarketsPageSize
+			}
 			if offset >= total {
 				event.Markets = nil
 			} else {
