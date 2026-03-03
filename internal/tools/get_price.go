@@ -129,7 +129,7 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 					// Last resort: try as direct CoinGecko ID.
 					pd, err = cgClient.GetSimplePrice(ctx, strings.ToLower(token))
 					if err != nil {
-						return mcp.NewToolResultError(fmt.Sprintf("no token found for %q", token)), nil
+						return mcp.NewToolResultError(fmt.Sprintf("price lookup failed for %q: %v", token, err)), nil
 					}
 					tokenSymbol = strings.ToUpper(token)
 					tokenName = token
