@@ -201,6 +201,85 @@ func (a *chainFetcherAdapter) GetRawTransaction(txHash string) ([]byte, error) {
 	return a.client.GetRawTransaction(a.ctx, a.chain, txHash)
 }
 
+// TxDashboard holds the transaction-level dashboard data from Blockchair.
+type TxDashboard struct {
+	BlockID       int64  `json:"block_id"`
+	Fee           int64  `json:"fee"`
+	InputTotal    int64  `json:"input_total"`
+	OutputTotal   int64  `json:"output_total"`
+	Confirmations int    `json:"confirmations,omitempty"`
+}
+
+type txDashboardResponse struct {
+	Data    map[string]txDashboardData `json:"data"`
+	Context struct {
+		Code int `json:"code"`
+	} `json:"context"`
+}
+
+type txDashboardData struct {
+	Transaction TxDashboard `json:"transaction"`
+}
+
+// GetTxDashboard fetches the transaction dashboard for a UTXO chain tx hash.
+// Returns nil, nil if the transaction is not found (404).
+func (c *Client) GetTxDashboard(ctx context.Context, chain, txHash string) (*TxDashboard, error) {
+	info, ok := SupportedChains[chain]
+	if !ok {
+		return nil, fmt.Errorf("unsupported UTXO chain: %s", chain)
+	}
+
+	url := fmt.Sprintf("%s/%s/dashboards/transaction/%s", c.baseURL, info.Slug, txHash)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("blockchair: tx dashboard returned %d", resp.StatusCode)
+	}
+
+	var dr txDashboardResponse
+	if err := json.NewDecoder(resp.Body).Decode(&dr); err != nil {
+		return nil, fmt.Errorf("blockchair: decode tx dashboard: %w", err)
+	}
+
+	data, ok := dr.Data[txHash]
+	if !ok {
+		return nil, nil
+	}
+
+	return &data.Transaction, nil
+}
+
+// FormatSatoshis converts a satoshi-like integer to a decimal string.
+func FormatSatoshis(amount int64, decimals int) string {
+	if decimals == 0 {
+		return fmt.Sprintf("%d", amount)
+	}
+	divisor := int64(1)
+	for range decimals {
+		divisor *= 10
+	}
+	whole := amount / divisor
+	frac := amount % divisor
+	if frac < 0 {
+		frac = -frac
+	}
+	format := fmt.Sprintf("%%d.%%0%dd", decimals)
+	return fmt.Sprintf(format, whole, frac)
+}
+
 type rawTxResponse struct {
 	Data map[string]struct {
 		RawTransaction string `json:"raw_transaction"`

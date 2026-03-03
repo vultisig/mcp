@@ -33,6 +33,7 @@ type rpcParam struct {
 	Account     string `json:"account,omitempty"`
 	LedgerIndex string `json:"ledger_index,omitempty"`
 	Strict      bool   `json:"strict,omitempty"`
+	Transaction string `json:"transaction,omitempty"`
 }
 
 type rpcResponse struct {
@@ -46,6 +47,15 @@ type rpcResult struct {
 	Drops        feeDrops    `json:"drops,omitempty"`
 	Error        string      `json:"error,omitempty"`
 	ErrorMessage string      `json:"error_message,omitempty"`
+	// Fields for "tx" method response.
+	Validated bool       `json:"validated,omitempty"`
+	Fee       string     `json:"Fee,omitempty"`
+	Meta      txMeta     `json:"meta,omitempty"`
+	Hash      string     `json:"hash,omitempty"`
+}
+
+type txMeta struct {
+	TransactionResult string `json:"TransactionResult,omitempty"`
 }
 
 type accountData struct {
@@ -160,4 +170,37 @@ func (c *Client) GetBaseFee(ctx context.Context) (uint64, error) {
 	}
 
 	return fee, nil
+}
+
+// TxStatus holds XRP transaction confirmation info.
+type TxStatus struct {
+	Validated bool
+	Fee       string
+	Result    string // e.g. "tesSUCCESS"
+	Ledger    int64
+}
+
+// GetTransactionStatus fetches the status of an XRP transaction by hash.
+func (c *Client) GetTransactionStatus(ctx context.Context, txHash string) (*TxStatus, error) {
+	result, err := c.do(ctx, "tx", rpcParam{
+		Transaction: txHash,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var ledger int64
+	if result.LedgerIndex.String() != "" {
+		l, err := strconv.ParseInt(result.LedgerIndex.String(), 10, 64)
+		if err == nil {
+			ledger = l
+		}
+	}
+
+	return &TxStatus{
+		Validated: result.Validated,
+		Fee:       result.Fee,
+		Result:    result.Meta.TransactionResult,
+		Ledger:    ledger,
+	}, nil
 }
