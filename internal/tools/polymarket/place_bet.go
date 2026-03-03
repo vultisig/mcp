@@ -17,11 +17,16 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewPlaceBetTool() mcp.Tool {
 	return mcp.NewTool("polymarket_place_bet",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+			"intercept":      "place_bet",
+		}),
 		mcp.WithDescription(
 			"Place a bet on a Polymarket event. Combines order building + signing payload construction into one call. "+
 				"Returns an order summary and order_ref. The backend handles signing details and auto-submits after the user signs. "+

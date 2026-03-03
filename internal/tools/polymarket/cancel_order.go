@@ -11,11 +11,15 @@ import (
 
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewCancelOrderTool() mcp.Tool {
 	return mcp.NewTool("polymarket_cancel_order",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+		}),
 		mcp.WithDescription(
 			"Cancel an open Polymarket order by its order ID. "+
 				"If auth credentials were cached from a previous order, "+
