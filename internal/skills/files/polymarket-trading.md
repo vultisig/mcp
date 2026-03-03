@@ -27,7 +27,7 @@ Trade prediction markets on Polymarket — a hybrid-decentralized platform on Po
 
 1. **ONE action per response.** Never batch multiple `build_custom_tx` or `polymarket_sign_bet`.
 2. **spend vs amount.** "$X" / "X dollars" / "bet X" → `spend`. "X shares" → `amount`. Server calculates shares.
-3. **Don't re-check approvals** after `all_approved: true` this session.
+3. **Don't re-emit approval transactions** after `all_approved: true` this session. Still call `polymarket_check_approvals` (step 2) to verify balance, but skip step 3 if already approved.
 4. **No fabricated slugs.** `event_slug` MUST come from `polymarket_search`. Never guess/recall.
 5. **Multi-outcome events:** pass candidate name (e.g. "Oklahoma City Thunder"), NOT "Yes".
 6. **Don't ask when intent is clear.** "Bet $2 on Thunder" → execute, don't ask "are you sure?"

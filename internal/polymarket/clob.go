@@ -179,7 +179,10 @@ func (c *Client) authenticatedPost(ctx context.Context, address string, creds *A
 
 	log.Printf("[polymarket] POST %s address=%s", path, truncateAddr(address))
 
-	headers := BuildL2Headers(address, *creds, "POST", path, string(data))
+	headers, err := BuildL2Headers(address, *creds, "POST", path, string(data))
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.clobURL+path, bytes.NewReader(data))
 	if err != nil {
@@ -216,7 +219,10 @@ func (c *Client) authenticatedDelete(ctx context.Context, address string, creds 
 	if creds == nil {
 		return nil, fmt.Errorf("polymarket: API credentials required for DELETE %s", path)
 	}
-	headers := BuildL2Headers(address, *creds, "DELETE", path, "")
+	headers, err := BuildL2Headers(address, *creds, "DELETE", path, "")
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.clobURL+path, nil)
 	if err != nil {
@@ -259,7 +265,10 @@ func (c *Client) authenticatedGet(ctx context.Context, address string, creds *Ap
 	if idx := strings.IndexByte(path, '?'); idx != -1 {
 		signPath = path[:idx]
 	}
-	headers := BuildL2Headers(address, *creds, "GET", signPath, "")
+	headers, err := BuildL2Headers(address, *creds, "GET", signPath, "")
+	if err != nil {
+		return nil, err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.clobURL+path, nil)
 	if err != nil {

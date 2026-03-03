@@ -2,11 +2,12 @@ package polymarket
 
 import (
 	"context"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -223,8 +224,12 @@ func HandlePlaceBet(pmClient *pm.Client, store *vault.Store, pool *evmclient.Poo
 			authCached = true
 		}
 
-		// Store result server-side
-		ref := fmt.Sprintf("ord_%d", time.Now().UnixNano())
+		// Store result server-side with random ref to avoid collision
+		refN, err := crand.Int(crand.Reader, new(big.Int).SetInt64(1<<62))
+		if err != nil {
+			return nil, fmt.Errorf("generate order ref: %w", err)
+		}
+		ref := fmt.Sprintf("ord_%s", refN.String())
 		buildResult.OrderRef = ref
 		orderStore.Put(ref, addr, buildResult)
 

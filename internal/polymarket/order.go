@@ -1,6 +1,7 @@
 package polymarket
 
 import (
+	crand "crypto/rand"
 	"fmt"
 	"math"
 	"math/big"
@@ -182,12 +183,14 @@ func conditionalRound(val float64, maxDec int) float64 {
 }
 
 // toTokenDecimals converts a human-readable amount to atomic units (×1e6).
+// Uses big.Float to avoid float64→int64 overflow on large amounts.
 func toTokenDecimals(f float64) *big.Int {
-	v := f * 1e6
-	if decimalPlaces(v) > 0 {
-		v = roundNormal(v, 0)
-	}
-	return new(big.Int).SetInt64(int64(v))
+	bf := new(big.Float).SetFloat64(f)
+	bf.Mul(bf, new(big.Float).SetFloat64(1e6))
+	// Round to nearest integer (add 0.5 and truncate)
+	bf.Add(bf, new(big.Float).SetFloat64(0.5))
+	result, _ := bf.Int(nil)
+	return result
 }
 
 // BuildOrder constructs EIP-712 payloads for both the order and L1 auth.
@@ -222,6 +225,9 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 
 	// Round price to tick precision
 	priceF = roundNormal(priceF, rc.price)
+	if priceF <= 0 {
+		return nil, fmt.Errorf("price rounds to zero at tick size %s, got: %s", params.TickSize, params.Price)
+	}
 	if priceF > 1.0 {
 		return nil, fmt.Errorf("price must be <= 1.0 (probability), got: %.4f", priceF)
 	}
@@ -267,8 +273,13 @@ func BuildOrder(maker string, params OrderParams) (*BuildOrderResult, error) {
 		exchange = NegRiskCTFExchangeAddress
 	}
 
-	// Salt (random-ish from timestamp)
-	salt := fmt.Sprintf("%d", time.Now().UnixNano())
+	// Salt: cryptographically random uint256 to prevent order hash prediction/collision
+	saltMax := new(big.Int).Lsh(big.NewInt(1), 128)
+	saltN, err := crand.Int(crand.Reader, saltMax)
+	if err != nil {
+		return nil, fmt.Errorf("generate order salt: %w", err)
+	}
+	salt := saltN.String()
 
 	// Expiry for GTD, else 0
 	expiration := "0"

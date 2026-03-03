@@ -16,6 +16,14 @@ import (
 
 const maxAuthAge = 5 * time.Minute
 
+// shortAddr safely truncates an address for logging (e.g. "0x1234...abcd").
+func shortAddr(addr string) string {
+	if len(addr) <= 10 {
+		return addr
+	}
+	return addr[:6] + "..." + addr[len(addr)-4:]
+}
+
 func NewSubmitOrderTool() mcp.Tool {
 	return mcp.NewTool("polymarket_submit_order",
 		mcp.WithDescription(
@@ -97,7 +105,7 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 		var creds *pm.ApiCreds
 		if cached, ok := authCache.Get(address); ok && authSig == "" {
 			// Reuse cached credentials — no auth signing needed
-			log.Printf("[submit_order] using cached API creds for %s...%s", address[:6], address[len(address)-4:])
+			log.Printf("[submit_order] using cached API creds for %s", shortAddr(address))
 			creds = cached
 		} else if authSig != "" {
 			// Derive from auth signature
@@ -134,7 +142,7 @@ func HandleSubmitOrder(pmClient *pm.Client, orderStore *pm.OrderStore, authCache
 
 			// Cache creds for future orders
 			authCache.Put(address, creds)
-			log.Printf("[submit_order] cached API creds for %s...%s", address[:6], address[len(address)-4:])
+			log.Printf("[submit_order] cached API creds for %s", shortAddr(address))
 		} else {
 			return mcp.NewToolResultError("no auth_signature provided and no cached credentials found. Call polymarket_build_order to get a fresh auth payload."), nil
 		}

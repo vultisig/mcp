@@ -27,7 +27,7 @@ CRITICAL: For UNBOND, set amount to "0" — the unbond amount goes ONLY in the m
 For calling smart contracts on EVM chains (Ethereum, Arbitrum, etc.).
 - **chain**: the EVM chain name (e.g. "Ethereum", "Arbitrum")
 - **contract_address**: the contract address (e.g. "0xa0b86991...")
-- **function_name**: the Solidity function name (e.g. "approve", "transfer")
+- **function_name**: the Solidity function name only — no parameter types (e.g. "approve", "transfer")
 - **params**: array of {type, value} objects. Supported types: "address", "uint256", "string", "bytes", "bool"
 - **value**: optional ETH/native token value to send with the call, in human-readable units (default "0")
 
@@ -79,7 +79,7 @@ Use read_evm_contract to call read-only (view/pure) functions on EVM smart contr
 
 - **chain**: the EVM chain name (e.g. "Ethereum", "Arbitrum")
 - **contract_address**: the contract address (e.g. "0xa0b86991...")
-- **function_name**: the Solidity function signature (e.g. "allowance(address,address)", "balanceOf(address)")
+- **function_name**: the full Solidity function signature including parameter types (e.g. "allowance(address,address)", "balanceOf(address)"). Note: this differs from `evm_contract` which takes only the function name.
 - **params**: array of {type, value} objects matching the function inputs. Supported types: "address", "uint256", "string", "bytes", "bool"
 - **output_types**: array of output type strings (e.g. ["uint256"]). Supported: "address", "uint256", "string", "bytes", "bool"
 
