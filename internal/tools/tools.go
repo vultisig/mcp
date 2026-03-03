@@ -26,6 +26,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newEVMGetTokenBalanceTool(), handleEVMGetTokenBalance(store, pool))
 	s.AddTool(newEVMCheckAllowanceTool(), handleEVMCheckAllowance(store, pool))
 	s.AddTool(newSearchTokenTool(), handleSearchToken(cgClient))
+	s.AddTool(newGetPriceTool(), handleGetPrice(cgClient))
 	s.AddTool(newBuildSwapTxTool(), handleBuildSwapTx(swapSvc))
 	s.AddTool(newConvertAmountTool(), handleConvertAmount())
 	s.AddTool(newABIEncodeTool(), handleABIEncode())
