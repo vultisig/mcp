@@ -13,6 +13,7 @@ import (
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
+	pmtools "github.com/vultisig/mcp/internal/tools/polymarket"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/vault"
@@ -54,6 +55,9 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newBuildSolanaSwapTool(), handleBuildSolanaSwap(store, jupClient))
 	s.AddTool(newGetXRPBalanceTool(), handleGetXRPBalance(store, xrpClient))
 	s.AddTool(newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient))
+
+	// Polymarket prediction market tools
+	pmtools.RegisterAll(s, store, pool)
 
 	err := protocols.RegisterAll(s, store, pool)
 	if err != nil {
