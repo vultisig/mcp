@@ -159,7 +159,7 @@ func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error)
 // --- Simple price -------------------------------------------------------------
 
 // GetSimplePrice fetches USD price, 24h change, and market cap for a single
-// CoinGecko coin ID. Results are cached for 1 minute.
+// CoinGecko coin ID. Results are cached for 5 minutes.
 func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, error) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	cacheKey := "simple:" + id
@@ -197,9 +197,13 @@ func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, err
 
 // GetTokenPrice fetches the USD price for an ERC-20 (or similar) token by its
 // contract address and CoinGecko asset-platform ID (e.g. "ethereum").
-// Results are cached for 1 minute keyed by "platform:address".
+// Results are cached for 5 minutes keyed by "platform:address".
 func (c *Client) GetTokenPrice(ctx context.Context, platform, contractAddress string) (*PriceData, error) {
-	cacheKey := "token:" + platform + ":" + strings.ToLower(contractAddress)
+	cacheAddr := strings.ToLower(contractAddress)
+	if platform == "solana" {
+		cacheAddr = contractAddress // Solana addresses are case-sensitive
+	}
+	cacheKey := "token:" + platform + ":" + cacheAddr
 	if cached, ok := c.priceCache.get(cacheKey); ok {
 		return &cached, nil
 	}
