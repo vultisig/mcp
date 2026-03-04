@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -18,7 +19,18 @@ const (
 	// detailCacheTTL controls how long coin detail (contract addresses,
 	// decimals, images) is reused. This data changes very rarely.
 	detailCacheTTL = 10 * time.Minute
+
+	// priceCacheTTL controls how long price data is reused. We use 5 minutes
+	// to avoid CoinGecko rate limits (search + price = 2 requests per coin).
+	priceCacheTTL = 5 * time.Minute
 )
+
+// PriceData holds price information for a single coin.
+type PriceData struct {
+	USD          float64 `json:"usd"`
+	USD24hChange float64 `json:"usd_24h_change"`
+	USDMarketCap float64 `json:"usd_market_cap"`
+}
 
 // Client wraps the CoinGecko REST API (via Vultisig proxy) with an in-memory TTL cache.
 type Client struct {
@@ -27,6 +39,7 @@ type Client struct {
 
 	searchCache *ttlCache[[]SearchCoin]
 	detailCache *ttlCache[*CoinDetail]
+	priceCache  *ttlCache[PriceData]
 }
 
 // NewClient creates a CoinGecko API client that routes through the Vultisig proxy.
@@ -36,6 +49,7 @@ func NewClient() *Client {
 		baseURL:     defaultBaseURL,
 		searchCache: newTTLCache[[]SearchCoin](searchCacheTTL),
 		detailCache: newTTLCache[*CoinDetail](detailCacheTTL),
+		priceCache:  newTTLCache[PriceData](priceCacheTTL),
 	}
 }
 
@@ -140,4 +154,88 @@ func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error)
 
 	c.detailCache.set(id, &cd)
 	return &cd, nil
+}
+
+// --- Simple price -------------------------------------------------------------
+
+// GetSimplePrice fetches USD price, 24h change, and market cap for a single
+// CoinGecko coin ID. Results are cached for 5 minutes.
+func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, error) {
+	id = strings.ToLower(strings.TrimSpace(id))
+	cacheKey := "simple:" + id
+	if cached, ok := c.priceCache.get(cacheKey); ok {
+		return &cached, nil
+	}
+
+	path := fmt.Sprintf("/simple/price?ids=%s&vs_currencies=usd&include_24hr_change=true&include_market_cap=true",
+		url.QueryEscape(id))
+
+	resp, err := c.doGet(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("coingecko: simple price for %q returned %d", id, resp.StatusCode)
+	}
+
+	// Response shape: { "bitcoin": { "usd": 12345.67, "usd_24h_change": -1.23, "usd_market_cap": 123456789 } }
+	var raw map[string]PriceData
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	pd, ok := raw[id]
+	if !ok {
+		return nil, fmt.Errorf("coingecko: no price data for %q", id)
+	}
+
+	c.priceCache.set(cacheKey, pd)
+	return &pd, nil
+}
+
+// GetTokenPrice fetches the USD price for an ERC-20 (or similar) token by its
+// contract address and CoinGecko asset-platform ID (e.g. "ethereum").
+// Results are cached for 5 minutes keyed by "platform:address".
+func (c *Client) GetTokenPrice(ctx context.Context, platform, contractAddress string) (*PriceData, error) {
+	cacheAddr := strings.ToLower(contractAddress)
+	if platform == "solana" {
+		cacheAddr = contractAddress // Solana addresses are case-sensitive
+	}
+	cacheKey := "token:" + platform + ":" + cacheAddr
+	if cached, ok := c.priceCache.get(cacheKey); ok {
+		return &cached, nil
+	}
+
+	path := fmt.Sprintf("/simple/token_price/%s?contract_addresses=%s&vs_currencies=usd&include_24hr_change=true&include_market_cap=true",
+		url.PathEscape(platform), url.QueryEscape(contractAddress))
+
+	resp, err := c.doGet(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("coingecko: token price for %s on %s returned %d", contractAddress, platform, resp.StatusCode)
+	}
+
+	// Response shape: { "0xabc...": { "usd": 1.0, "usd_24h_change": 0.01, "usd_market_cap": 123456 } }
+	var raw map[string]PriceData
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	// CoinGecko lowercases EVM addresses but preserves Solana addresses.
+	pd, ok := raw[strings.ToLower(contractAddress)]
+	if !ok {
+		pd, ok = raw[contractAddress]
+	}
+	if !ok {
+		return nil, fmt.Errorf("coingecko: no price data for token %s on %s", contractAddress, platform)
+	}
+
+	c.priceCache.set(cacheKey, pd)
+	return &pd, nil
 }
