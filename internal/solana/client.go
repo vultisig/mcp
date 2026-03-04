@@ -252,6 +252,52 @@ func (c *Client) BuildTokenTransfer(
 	return txBytes, nil
 }
 
+// ErrTxNotFound is returned when a transaction signature cannot be found.
+var ErrTxNotFound = fmt.Errorf("transaction not found")
+
+// TxStatus holds transaction confirmation info.
+type TxStatus struct {
+	Slot          uint64
+	Status        string // "processed", "confirmed", "finalized", "failed"
+	Err           string
+	Confirmations *uint64
+}
+
+// GetTransactionStatus fetches the status of a transaction by its signature.
+func (c *Client) GetTransactionStatus(ctx context.Context, signature string) (*TxStatus, error) {
+	sig, err := solana.SignatureFromBase58(signature)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Solana signature: %w", err)
+	}
+
+	statuses, err := c.rpc.GetSignatureStatuses(ctx, true, sig)
+	if err != nil {
+		return nil, fmt.Errorf("get signature status: %w", err)
+	}
+
+	if statuses == nil || len(statuses.Value) == 0 || statuses.Value[0] == nil {
+		return nil, ErrTxNotFound
+	}
+
+	s := statuses.Value[0]
+	result := &TxStatus{
+		Slot:   s.Slot,
+		Status: string(s.ConfirmationStatus),
+	}
+
+	if s.Confirmations != nil {
+		conf := uint64(*s.Confirmations)
+		result.Confirmations = &conf
+	}
+
+	if s.Err != nil {
+		result.Status = "failed"
+		result.Err = fmt.Sprintf("%v", s.Err)
+	}
+
+	return result, nil
+}
+
 func buildCreateATAInstruction(payer, owner, mint, ataAddress, tokenProgram solana.PublicKey) solana.Instruction {
 	return solana.NewInstruction(
 		solana.SPLAssociatedTokenAccountProgramID,
