@@ -50,21 +50,22 @@ var chainToPlatform = map[string]string{
 }
 
 var evmAddressRE = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
+var solanaAddressRE = regexp.MustCompile(`^[1-9A-HJ-NP-Za-km-z]{32,44}$`)
 
 func newGetPriceTool() mcp.Tool {
 	return mcp.NewTool("get_price",
 		mcp.WithDescription(
 			"Get the current USD price, 24h change, and market cap for a token. "+
 				"Accepts a ticker symbol (ETH, BTC, USDC), CoinGecko coin ID (ethereum, bitcoin), "+
-				"or an EVM contract address (requires chain parameter). "+
+				"an EVM contract address (requires chain parameter), or a Solana mint address. "+
 				"Optionally calculates the USD value of a given amount.",
 		),
 		mcp.WithString("token",
-			mcp.Description("Token ticker symbol (e.g. ETH), CoinGecko ID (e.g. ethereum), or contract address (0x-prefixed, 40 hex chars)."),
+			mcp.Description("Token ticker symbol (e.g. ETH), CoinGecko ID (e.g. ethereum), EVM contract address (0x-prefixed), or Solana mint address (base58)."),
 			mcp.Required(),
 		),
 		mcp.WithString("chain",
-			mcp.Description("EVM chain name. Required when token is a contract address. One of: "+strings.Join(chainPlatformNames(), ", ")),
+			mcp.Description("Chain name. Required when token is a contract or mint address. One of: "+strings.Join(chainPlatformNames(), ", ")),
 		),
 		mcp.WithString("amount",
 			mcp.Description("Optional amount of the token to calculate USD value for (e.g. \"2.5\")."),
@@ -87,7 +88,7 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 
 		switch {
 		case evmAddressRE.MatchString(token):
-			// Contract address — need chain param.
+			// EVM contract address — need chain param.
 			if chain == "" {
 				return mcp.NewToolResultError("chain is required when querying by contract address"), nil
 			}
@@ -101,6 +102,15 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 			}
 			tokenSymbol = token[:8] + "..."
 			tokenName = fmt.Sprintf("Token on %s", chain)
+
+		case chain == "Solana" && solanaAddressRE.MatchString(token):
+			// Solana mint address (base58, 32-44 chars).
+			pd, err = cgClient.GetTokenPrice(ctx, "solana", token)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("solana token price lookup failed: %v", err)), nil
+			}
+			tokenSymbol = token[:8] + "..."
+			tokenName = "Token on Solana"
 
 		default:
 			// Try native ticker first (uppercase).
@@ -151,8 +161,8 @@ func handleGetPrice(cgClient *coingecko.Client) server.ToolHandlerFunc {
 			if parseErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid amount %q: %v", amountStr, parseErr)), nil
 			}
-			if amount < 0 {
-				return mcp.NewToolResultError("amount must be non-negative"), nil
+			if amount <= 0 {
+				return mcp.NewToolResultError("amount must be positive"), nil
 			}
 			value := amount * pd.USD
 			resp += fmt.Sprintf("\nAmount: %s\nValue: $%s", amountStr, formatUSD(value))

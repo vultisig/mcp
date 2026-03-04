@@ -20,9 +20,9 @@ const (
 	// decimals, images) is reused. This data changes very rarely.
 	detailCacheTTL = 10 * time.Minute
 
-	// priceCacheTTL controls how long price data is reused. Prices are
-	// volatile so we use a short TTL.
-	priceCacheTTL = 1 * time.Minute
+	// priceCacheTTL controls how long price data is reused. We use 5 minutes
+	// to avoid CoinGecko rate limits (search + price = 2 requests per coin).
+	priceCacheTTL = 5 * time.Minute
 )
 
 // PriceData holds price information for a single coin.
@@ -223,9 +223,11 @@ func (c *Client) GetTokenPrice(ctx context.Context, platform, contractAddress st
 		return nil, err
 	}
 
-	// CoinGecko lowercases the contract address in the response key.
-	addr := strings.ToLower(contractAddress)
-	pd, ok := raw[addr]
+	// CoinGecko lowercases EVM addresses but preserves Solana addresses.
+	pd, ok := raw[strings.ToLower(contractAddress)]
+	if !ok {
+		pd, ok = raw[contractAddress]
+	}
 	if !ok {
 		return nil, fmt.Errorf("coingecko: no price data for token %s on %s", contractAddress, platform)
 	}
