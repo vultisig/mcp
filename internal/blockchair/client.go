@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/vultisig/mcp/internal/cache"
 )
 
 const dashboardCacheTTL = 5 * time.Minute
@@ -78,8 +80,8 @@ type Client struct {
 	http    *http.Client
 	baseURL string
 
-	cache      *ttlCache[*AddressDashboard]
-	rawTxCache *ttlCache[[]byte]
+	cache      *cache.TTL[*AddressDashboard]
+	rawTxCache *cache.TTL[[]byte]
 }
 
 // NewClient creates a Blockchair API client.
@@ -87,8 +89,8 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		http:       &http.Client{Timeout: 30 * time.Second},
 		baseURL:    baseURL,
-		cache:      newTTLCache[*AddressDashboard](dashboardCacheTTL),
-		rawTxCache: newTTLCache[[]byte](dashboardCacheTTL),
+		cache:      cache.NewTTL[*AddressDashboard](dashboardCacheTTL),
+		rawTxCache: cache.NewTTL[[]byte](dashboardCacheTTL),
 	}
 }
 
@@ -101,7 +103,7 @@ func (c *Client) GetAddressDashboard(ctx context.Context, chain, address string)
 	}
 
 	cacheKey := chain + ":" + address
-	if cached, ok := c.cache.get(cacheKey); ok {
+	if cached, ok := c.cache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -131,7 +133,7 @@ func (c *Client) GetAddressDashboard(ctx context.Context, chain, address string)
 		return nil, fmt.Errorf("blockchair: no data for address %s", address)
 	}
 
-	c.cache.set(cacheKey, &dashboard)
+	c.cache.Set(cacheKey, &dashboard)
 	return &dashboard, nil
 }
 
@@ -144,7 +146,7 @@ func (c *Client) GetRawTransaction(ctx context.Context, chain, txHash string) ([
 	}
 
 	cacheKey := chain + ":" + txHash
-	if cached, ok := c.rawTxCache.get(cacheKey); ok {
+	if cached, ok := c.rawTxCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -180,7 +182,7 @@ func (c *Client) GetRawTransaction(ctx context.Context, chain, txHash string) ([
 		return nil, fmt.Errorf("blockchair: decode raw tx hex: %w", err)
 	}
 
-	c.rawTxCache.set(cacheKey, raw)
+	c.rawTxCache.Set(cacheKey, raw)
 	return raw, nil
 }
 

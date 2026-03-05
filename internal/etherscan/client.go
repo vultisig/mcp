@@ -8,14 +8,14 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/vultisig/mcp/internal/cache"
 )
 
 const (
 	defaultBaseURL = "https://api.etherscan.io/v2/api"
 	abiCacheTTL    = 24 * time.Hour
 	txCacheTTL     = 2 * time.Minute
-
-	rateLimitSleep = 30 * time.Second
 )
 
 // ChainIDs maps Vultisig chain names to Etherscan V2 chain IDs.
@@ -37,9 +37,9 @@ type Client struct {
 	http     *http.Client
 	baseURL  string
 	apiKey   string
-	abiCache *ttlCache[string]
-	srcCache *ttlCache[*SourceInfo]
-	txCache  *ttlCache[[]Transaction]
+	abiCache *cache.TTL[string]
+	srcCache *cache.TTL[*SourceInfo]
+	txCache  *cache.TTL[[]Transaction]
 }
 
 // NewClient creates an Etherscan API client. apiKey is optional (empty = free tier).
@@ -48,14 +48,13 @@ func NewClient(apiKey string) *Client {
 		http:     &http.Client{Timeout: 30 * time.Second},
 		baseURL:  defaultBaseURL,
 		apiKey:   apiKey,
-		abiCache: newTTLCache[string](abiCacheTTL),
-		srcCache: newTTLCache[*SourceInfo](abiCacheTTL),
-		txCache:  newTTLCache[[]Transaction](txCacheTTL),
+		abiCache: cache.NewTTL[string](abiCacheTTL),
+		srcCache: cache.NewTTL[*SourceInfo](abiCacheTTL),
+		txCache:  cache.NewTTL[[]Transaction](txCacheTTL),
 	}
 }
 
 // doGet calls the Etherscan V2 API and extracts the result field.
-// If rate limited, it sleeps 30s and retries once.
 func (c *Client) doGet(ctx context.Context, chain string, params map[string]string) (json.RawMessage, error) {
 	chainID, ok := ChainIDs[chain]
 	if !ok {
@@ -73,20 +72,7 @@ func (c *Client) doGet(ctx context.Context, chain string, params map[string]stri
 	}
 	u.RawQuery = q.Encode()
 
-	result, err := c.fetch(ctx, u.String())
-	if err != nil {
-		// Check for rate limit
-		if strings.Contains(err.Error(), "rate limit") {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(rateLimitSleep):
-			}
-			return c.fetch(ctx, u.String())
-		}
-		return nil, err
-	}
-	return result, nil
+	return c.fetch(ctx, u.String())
 }
 
 func (c *Client) fetch(ctx context.Context, rawURL string) (json.RawMessage, error) {
@@ -115,7 +101,7 @@ func (c *Client) fetch(ctx context.Context, rawURL string) (json.RawMessage, err
 		// Remove surrounding quotes from result string
 		msg = strings.Trim(msg, "\"")
 		if strings.Contains(strings.ToLower(msg), "rate limit") {
-			return nil, fmt.Errorf("rate limit: %s", msg)
+			return nil, fmt.Errorf("etherscan rate limit exceeded, please wait a moment and try again")
 		}
 		if strings.Contains(msg, "Missing/Invalid API Key") {
 			return nil, fmt.Errorf("etherscan API key required: set ETHERSCAN_API_KEY environment variable (free at etherscan.io)")
@@ -129,7 +115,7 @@ func (c *Client) fetch(ctx context.Context, rawURL string) (json.RawMessage, err
 // GetContractABI returns the ABI JSON string for a verified contract.
 func (c *Client) GetContractABI(ctx context.Context, chain, address string) (string, error) {
 	cacheKey := chain + ":" + strings.ToLower(address)
-	if cached, ok := c.abiCache.get(cacheKey); ok {
+	if cached, ok := c.abiCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -147,14 +133,14 @@ func (c *Client) GetContractABI(ctx context.Context, chain, address string) (str
 		return "", err
 	}
 
-	c.abiCache.set(cacheKey, abi)
+	c.abiCache.Set(cacheKey, abi)
 	return abi, nil
 }
 
 // GetSourceCode returns contract source/verification info including proxy detection.
 func (c *Client) GetSourceCode(ctx context.Context, chain, address string) (*SourceInfo, error) {
 	cacheKey := chain + ":" + strings.ToLower(address)
-	if cached, ok := c.srcCache.get(cacheKey); ok {
+	if cached, ok := c.srcCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -176,14 +162,14 @@ func (c *Client) GetSourceCode(ctx context.Context, chain, address string) (*Sou
 	}
 
 	info := &infos[0]
-	c.srcCache.set(cacheKey, info)
+	c.srcCache.Set(cacheKey, info)
 	return info, nil
 }
 
 // GetTxList returns recent transactions for an address.
 func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pageSize int) ([]Transaction, error) {
 	cacheKey := fmt.Sprintf("%s:%s:%d:%d", chain, strings.ToLower(address), page, pageSize)
-	if cached, ok := c.txCache.get(cacheKey); ok {
+	if cached, ok := c.txCache.Get(cacheKey); ok {
 		return cached, nil
 	}
 
@@ -208,6 +194,6 @@ func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pag
 		return nil, err
 	}
 
-	c.txCache.set(cacheKey, txs)
+	c.txCache.Set(cacheKey, txs)
 	return txs, nil
 }
