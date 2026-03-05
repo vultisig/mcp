@@ -182,8 +182,10 @@ func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pag
 		"sort":    "desc",
 	})
 	if err != nil {
-		// "No transactions found" is returned as an error by etherscan
-		if strings.Contains(err.Error(), "No transactions found") {
+		// Etherscan returns status "0" for addresses with no transactions.
+		// The error message varies: "No transactions found" or just "[]".
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "No transactions found") || errMsg == "[]" {
 			c.txCache.Set(cacheKey, []Transaction{})
 			return nil, nil
 		}
