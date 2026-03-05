@@ -11,11 +11,15 @@ import (
 
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewPositionsTool() mcp.Tool {
 	return mcp.NewTool("polymarket_positions",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+		}),
 		mcp.WithDescription(
 			"Get Polymarket positions for an address. "+
 				"Shows outcome tokens held, average entry price, current price, and P&L. "+
