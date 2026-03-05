@@ -147,7 +147,9 @@ func (c *Client) GetRawTransaction(ctx context.Context, chain, txHash string) ([
 
 	cacheKey := chain + ":" + txHash
 	if cached, ok := c.rawTxCache.Get(cacheKey); ok {
-		return cached, nil
+		cp := make([]byte, len(cached))
+		copy(cp, cached)
+		return cp, nil
 	}
 
 	url := fmt.Sprintf("%s/%s/raw/transaction/%s", c.baseURL, info.Slug, txHash)

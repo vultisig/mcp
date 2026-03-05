@@ -141,7 +141,8 @@ func (c *Client) GetContractABI(ctx context.Context, chain, address string) (str
 func (c *Client) GetSourceCode(ctx context.Context, chain, address string) (*SourceInfo, error) {
 	cacheKey := chain + ":" + strings.ToLower(address)
 	if cached, ok := c.srcCache.Get(cacheKey); ok {
-		return cached, nil
+		cp := *cached
+		return &cp, nil
 	}
 
 	result, err := c.doGet(ctx, chain, map[string]string{
@@ -161,16 +162,23 @@ func (c *Client) GetSourceCode(ctx context.Context, chain, address string) (*Sou
 		return nil, fmt.Errorf("no source info returned")
 	}
 
-	info := &infos[0]
-	c.srcCache.Set(cacheKey, info)
-	return info, nil
+	info := infos[0]
+	c.srcCache.Set(cacheKey, &info)
+	cp := info
+	return &cp, nil
+}
+
+func cloneTransactions(in []Transaction) []Transaction {
+	out := make([]Transaction, len(in))
+	copy(out, in)
+	return out
 }
 
 // GetTxList returns recent transactions for an address.
 func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pageSize int) ([]Transaction, error) {
 	cacheKey := fmt.Sprintf("%s:%s:%d:%d", chain, strings.ToLower(address), page, pageSize)
 	if cached, ok := c.txCache.Get(cacheKey); ok {
-		return cached, nil
+		return cloneTransactions(cached), nil
 	}
 
 	result, err := c.doGet(ctx, chain, map[string]string{
@@ -187,7 +195,7 @@ func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pag
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "No transactions found") || errMsg == "[]" {
 			c.txCache.Set(cacheKey, []Transaction{})
-			return nil, nil
+			return []Transaction{}, nil
 		}
 		return nil, err
 	}
@@ -198,5 +206,5 @@ func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pag
 	}
 
 	c.txCache.Set(cacheKey, txs)
-	return txs, nil
+	return cloneTransactions(txs), nil
 }

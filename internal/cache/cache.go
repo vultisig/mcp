@@ -42,9 +42,9 @@ func (c *TTL[V]) Get(key string) (V, bool) {
 	}
 
 	now := time.Now()
-	if now.After(e.expiresAt) {
+	if !now.Before(e.expiresAt) {
 		c.mu.Lock()
-		if cur, exists := c.entries[key]; exists && now.After(cur.expiresAt) {
+		if cur, exists := c.entries[key]; exists && !now.Before(cur.expiresAt) {
 			delete(c.entries, key)
 		}
 		c.mu.Unlock()
@@ -65,7 +65,7 @@ func (c *TTL[V]) Set(key string, value V) {
 	}
 	if now.Sub(c.lastSweep) >= c.ttl {
 		for k, e := range c.entries {
-			if now.After(e.expiresAt) {
+			if !now.Before(e.expiresAt) {
 				delete(c.entries, k)
 			}
 		}
