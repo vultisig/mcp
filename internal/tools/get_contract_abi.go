@@ -73,7 +73,7 @@ func handleGetContractABI(esClient *etherscan.Client) server.ToolHandlerFunc {
 		if contractName == "" {
 			contractName = "Unknown"
 		}
-		truncAddr := address[:6] + "..." + address[len(address)-4:]
+		truncAddr := shortenMiddle(address, 6, 4)
 		fmt.Fprintf(&sb, "Contract: %s (%s)\n", contractName, truncAddr)
 		fmt.Fprintf(&sb, "Chain: %s\n", chain)
 

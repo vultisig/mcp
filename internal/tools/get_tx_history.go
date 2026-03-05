@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/vultisig/mcp/internal/etherscan"
+	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -53,6 +54,10 @@ func handleGetTxHistory(store *vault.Store, esClient *etherscan.Client) server.T
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain: %q. Supported: Ethereum, BSC, Polygon, Arbitrum, Optimism, Base, Avalanche, Blast, Mantle, Zksync.", chain)), nil
 		}
 
+		if explicit != "" && !addressRegex.MatchString(explicit) {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid address format: %q. Expected 0x-prefixed 40-character hex string.", explicit)), nil
+		}
+
 		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("could not resolve address: %v", err)), nil
@@ -60,43 +65,43 @@ func handleGetTxHistory(store *vault.Store, esClient *etherscan.Client) server.T
 
 		txs, err := esClient.GetTxList(ctx, chain, addr, 1, limit)
 		if err != nil {
-			if strings.Contains(err.Error(), "API key required") {
+			if strings.Contains(err.Error(), "API key required") || strings.Contains(err.Error(), "rate limit") {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return nil, fmt.Errorf("etherscan get tx list: %w", err)
 		}
 
+		ticker := evmclient.NativeTicker(chain)
+
 		if len(txs) == 0 {
-			truncAddr := addr[:6] + "..." + addr[len(addr)-4:]
-			return mcp.NewToolResultText(fmt.Sprintf("No transactions found for %s on %s.", truncAddr, chain)), nil
+			return mcp.NewToolResultText(fmt.Sprintf("No transactions found for %s on %s.", shortenMiddle(addr, 6, 4), chain)), nil
 		}
 
-		truncAddr := addr[:6] + "..." + addr[len(addr)-4:]
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "Recent transactions for %s on %s (showing %d):\n\n", truncAddr, chain, len(txs))
+		fmt.Fprintf(&sb, "Recent transactions for %s on %s (showing %d):\n\n", shortenMiddle(addr, 6, 4), chain, len(txs))
 
 		for i, tx := range txs {
-			truncHash := tx.Hash[:6] + "..." + tx.Hash[len(tx.Hash)-4:]
-			truncFrom := tx.From[:6] + "..." + tx.From[len(tx.From)-4:]
+			truncHash := shortenMiddle(tx.Hash, 6, 4)
+			truncFrom := shortenMiddle(tx.From, 6, 4)
 			truncTo := ""
 			if tx.To != "" {
-				truncTo = tx.To[:6] + "..." + tx.To[len(tx.To)-4:]
+				truncTo = shortenMiddle(tx.To, 6, 4)
 			} else {
 				truncTo = "Contract Creation"
 			}
 
 			// Status
-			status := "✓ Success"
+			status := "Success"
 			if tx.IsError == "1" {
-				status = "✗ Failed"
+				status = "Failed"
 			}
 
 			// Timestamp
 			ts, _ := strconv.ParseInt(tx.TimeStamp, 10, 64)
 			timeAgo := formatTimeAgo(time.Unix(ts, 0))
 
-			// Value in ETH
-			valueETH := weiToETH(tx.Value)
+			// Value in native token
+			valueNative := weiToETH(tx.Value)
 
 			// Method
 			method := ""
@@ -112,21 +117,29 @@ func handleGetTxHistory(store *vault.Store, esClient *etherscan.Client) server.T
 			// Gas
 			gasUsed := tx.GasUsed
 			gasPrice := tx.GasPrice
-			gasCostETH := ""
+			gasCostNative := ""
 			if gasUsed != "" && gasPrice != "" {
-				gasCostETH = calcGasCost(gasUsed, gasPrice)
+				gasCostNative = calcGasCost(gasUsed, gasPrice)
 			}
 
 			fmt.Fprintf(&sb, "%d. %s | %s | %s\n", i+1, truncHash, timeAgo, status)
-			fmt.Fprintf(&sb, "   %s → %s | %s ETH%s\n", truncFrom, truncTo, valueETH, method)
-			if gasCostETH != "" {
-				fmt.Fprintf(&sb, "   Gas: %s (%s ETH)\n", gasUsed, gasCostETH)
+			fmt.Fprintf(&sb, "   %s -> %s | %s %s%s\n", truncFrom, truncTo, valueNative, ticker, method)
+			if gasCostNative != "" {
+				fmt.Fprintf(&sb, "   Gas: %s (%s %s)\n", gasUsed, gasCostNative, ticker)
 			}
 			sb.WriteString("\n")
 		}
 
 		return mcp.NewToolResultText(sb.String()), nil
 	}
+}
+
+// shortenMiddle truncates a string by keeping head and tail characters with "..." in between.
+func shortenMiddle(s string, head, tail int) string {
+	if len(s) <= head+tail {
+		return s
+	}
+	return s[:head] + "..." + s[len(s)-tail:]
 }
 
 func weiToETH(weiStr string) string {
