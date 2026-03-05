@@ -13,11 +13,15 @@ import (
 
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewOpenOrdersTool() mcp.Tool {
 	return mcp.NewTool("polymarket_open_orders",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+		}),
 		mcp.WithDescription(
 			"List open orders on Polymarket for the authenticated user. "+
 				"If auth credentials were cached from a previous order, "+

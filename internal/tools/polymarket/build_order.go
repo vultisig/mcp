@@ -16,11 +16,15 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func NewBuildOrderTool() mcp.Tool {
 	return mcp.NewTool("polymarket_build_order",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+		}),
 		mcp.WithDescription(
 			"INTERNAL — do NOT call directly. Use polymarket_place_bet instead. "+
 				"Low-level: builds EIP-712 typed data payloads for a Polymarket order.",

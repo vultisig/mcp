@@ -14,6 +14,7 @@ import (
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	pm "github.com/vultisig/mcp/internal/polymarket"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -21,6 +22,9 @@ const maxUint256 = "115792089237316195423570985008687907853269984665640564039457
 
 func NewCheckApprovalsTool() mcp.Tool {
 	return mcp.NewTool("polymarket_check_approvals",
+		toolmeta.WithMeta(map[string]any{
+			"inject_address": "evm",
+		}),
 		mcp.WithDescription(
 			"Check ALL required Polymarket approvals (6 total) and return exact build_custom_tx actions for each missing one. "+
 				"Call BEFORE placing any order. Returns USDC.e balance + missing approval actions. "+
