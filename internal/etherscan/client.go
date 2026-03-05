@@ -184,6 +184,7 @@ func (c *Client) GetTxList(ctx context.Context, chain, address string, page, pag
 	if err != nil {
 		// "No transactions found" is returned as an error by etherscan
 		if strings.Contains(err.Error(), "No transactions found") {
+			c.txCache.Set(cacheKey, []Transaction{})
 			return nil, nil
 		}
 		return nil, err
