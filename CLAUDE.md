@@ -1,5 +1,16 @@
 # Vultisig MCP Server
 
+## Security Tier
+
+STANDARD
+
+## Critical Boundaries
+
+- `internal/tools/` — Each tool is a file. Tool parameters define what agents can do.
+- `internal/protocols/` — DeFi protocol handlers. Incorrect ABI encoding = lost funds.
+- `internal/vault/store.go` — Per-session vault state. Thread-safety critical.
+- Skill files (`internal/skills/files/`) — Markdown docs that teach agents multi-step workflows.
+
 ## Build & Run
 
 ```bash
