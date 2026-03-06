@@ -14,6 +14,7 @@ import (
 func newBCHFeeRateTool() mcp.Tool {
 	return mcp.NewTool("bch_fee_rate",
 		mcp.WithDescription("Get the recommended Bitcoin Cash fee rate in sat/vB from THORChain inbound addresses."),
+		WithCategory("fee"),
 	)
 }
 

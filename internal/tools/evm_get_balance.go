@@ -26,6 +26,7 @@ func newEVMGetBalanceTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Wallet address (0x-prefixed). Optional if vault info is set."),
 		),
+		WithCategory("balance", "evm"),
 	)
 }
 

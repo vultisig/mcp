@@ -44,6 +44,7 @@ func newBuildZECSendTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Sender Zcash address. Falls back to vault-derived address if omitted."),
 		),
+		WithCategory("send"),
 	)
 }
 

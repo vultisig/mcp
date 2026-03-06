@@ -34,6 +34,7 @@ func newBuildSolanaTxTool() mcp.Tool {
 			mcp.Description("Amount in lamports (decimal string)."),
 			mcp.Required(),
 		),
+		WithCategory("send", "solana"),
 	)
 }
 

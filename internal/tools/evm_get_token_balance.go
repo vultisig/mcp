@@ -32,6 +32,7 @@ func newEVMGetTokenBalanceTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Holder address (0x-prefixed). Optional if vault info is set."),
 		),
+		WithCategory("balance", "evm"),
 	)
 }
 

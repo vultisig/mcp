@@ -39,6 +39,7 @@ func newEVMTxInfoTool() mcp.Tool {
 		mcp.WithString("value",
 			mcp.Description("Wei value for gas estimation (decimal string, optional)."),
 		),
+		WithCategory("contract", "evm", "fee"),
 	)
 }
 

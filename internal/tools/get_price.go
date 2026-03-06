@@ -70,6 +70,7 @@ func newGetPriceTool() mcp.Tool {
 		mcp.WithString("amount",
 			mcp.Description("Optional amount of the token to calculate USD value for (e.g. \"2.5\")."),
 		),
+		WithCategory("utility"),
 	)
 }
 

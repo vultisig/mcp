@@ -26,6 +26,7 @@ func newBuildSwapTxTool() mcp.Tool {
 		mcp.WithString("amount", mcp.Description("Amount in base units (e.g. \"1000000\" for 1 USDC)"), mcp.Required()),
 		mcp.WithString("sender", mcp.Description("Sender wallet address"), mcp.Required()),
 		mcp.WithString("destination", mcp.Description("Destination wallet address"), mcp.Required()),
+		WithCategory("swap"),
 	)
 }
 

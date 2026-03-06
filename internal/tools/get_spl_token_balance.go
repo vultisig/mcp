@@ -27,6 +27,7 @@ func newGetSPLTokenBalanceTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Owner's Solana address (base58). Optional if vault info is set."),
 		),
+		WithCategory("balance", "solana"),
 	)
 }
 

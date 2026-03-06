@@ -28,6 +28,7 @@ func newABIEncodeTool() mcp.Tool {
 			mcp.Required(),
 			mcp.WithStringItems(),
 		),
+		WithCategory("contract"),
 	)
 }
 

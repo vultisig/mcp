@@ -49,6 +49,7 @@ func newBuildLTCSendTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Sender Litecoin address. Falls back to vault-derived address if omitted."),
 		),
+		WithCategory("send"),
 	)
 }
 

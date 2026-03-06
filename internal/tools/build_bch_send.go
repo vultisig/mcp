@@ -49,6 +49,7 @@ func newBuildBCHSendTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Sender Bitcoin Cash address. Falls back to vault-derived address if omitted."),
 		),
+		WithCategory("send"),
 	)
 }
 

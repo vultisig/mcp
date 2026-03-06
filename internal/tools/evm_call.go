@@ -45,6 +45,7 @@ func newEVMCallTool() mcp.Tool {
 		mcp.WithString("output_types",
 			mcp.Description("Comma-separated ABI types to decode the output (e.g. \"uint256,address\"). If omitted, only raw hex is returned."),
 		),
+		WithCategory("contract", "evm"),
 	)
 }
 

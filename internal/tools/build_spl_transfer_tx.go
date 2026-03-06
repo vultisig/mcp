@@ -40,6 +40,7 @@ func newBuildSPLTransferTxTool() mcp.Tool {
 			mcp.Description("Amount in base units (decimal string)."),
 			mcp.Required(),
 		),
+		WithCategory("send", "solana"),
 	)
 }
 

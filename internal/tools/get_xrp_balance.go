@@ -24,6 +24,7 @@ func newGetXRPBalanceTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("XRP address. Optional if vault info is set."),
 		),
+		WithCategory("balance", "xrp"),
 	)
 }
 

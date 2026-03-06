@@ -49,6 +49,7 @@ func newBuildDOGESendTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Sender Dogecoin address. Falls back to vault-derived address if omitted."),
 		),
+		WithCategory("send"),
 	)
 }
 

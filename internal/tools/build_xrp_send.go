@@ -42,6 +42,7 @@ func newBuildXRPSendTool() mcp.Tool {
 		mcp.WithString("from",
 			mcp.Description("Sender XRP address. Falls back to vault-derived address if omitted."),
 		),
+		WithCategory("send", "xrp"),
 	)
 }
 
