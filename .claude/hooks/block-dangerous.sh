@@ -68,6 +68,10 @@ SECRET_PATTERNS=(
   "\.pfx$"
   "\.keystore$"
   "\.jks$"
+  "^internal/tools/"
+  "^internal/protocols/"
+  "^internal/vault/store\.go$"
+  "^internal/skills/files/"
 )
 
 for pattern in "${SECRET_PATTERNS[@]}"; do

@@ -75,7 +75,7 @@ Every criterion must be verifiable by running a command or checking a file.
 
 | Verifiable | Vague |
 |------------|-------|
-| `go build ./cmd/server/` succeeds | Code compiles |
+| `go build ./cmd/mcp-server/` succeeds | Code compiles |
 | `go test ./... -race` passes | Tests pass |
 
 ### Examples

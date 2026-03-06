@@ -161,6 +161,7 @@ Logging is implemented via mcp-go `ToolHandlerMiddleware` (for tool call timing)
 - Replace directives in go.mod are required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`.
 - EVM client pool (`internal/evm.Pool`) lazily creates per-chain clients on first use and caches them.
 - Default URLs belong in `config.go` (envconfig defaults), not in client constructors.
+
 ## Knowledge Base
 
 For deeper context, see [vultisig-knowledge](https://github.com/vultisig/vultisig-knowledge). Read only when needed:

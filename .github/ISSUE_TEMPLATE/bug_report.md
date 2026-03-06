@@ -52,9 +52,9 @@ verify: []                # Commands to confirm fix
 ## Examples
 
 **Before:**
-```
+```text
 ```
 
 **After:**
-```
+```text
 ```

@@ -48,11 +48,11 @@ verify: []                # Commands to confirm completion
 ## Examples
 
 **Input:**
-```
+```text
 ```
 
 **Output:**
-```
+```text
 ```
 
 ## Technical Notes
