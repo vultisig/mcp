@@ -2,28 +2,23 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	reth "github.com/vultisig/recipes/chain/evm/ethereum"
-
 	evmclient "github.com/vultisig/mcp/internal/evm"
-	"github.com/vultisig/mcp/internal/types"
 )
 
 func newBuildEVMTxTool() mcp.Tool {
 	return mcp.NewTool("build_evm_tx",
 		mcp.WithDescription(
-			"Build an unsigned EIP-1559 (type 2) EVM transaction for any EVM chain. "+
-				"All fee/nonce parameters are explicit — obtain them from evm_tx_info first. "+
-				"Returns the RLP-encoded unsigned transaction ready for signing.",
+			"Return EVM transaction arguments for an EIP-1559 (type 2) transaction. "+
+				"Use evm_tx_info to obtain nonce, gas prices, and chain ID first. "+
+				"The client is responsible for assembling and signing the transaction.",
 		),
 		mcp.WithString("chain",
 			mcp.Description("EVM chain name. One of: "+chainEnumDesc()+". Determines chain_id when not explicitly set."),
@@ -71,8 +66,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain: %s", chainName)), nil
 		}
 		if cidStr := req.GetString("chain_id", ""); cidStr != "" {
-			cid, ok := new(big.Int).SetString(cidStr, 10)
-			if !ok {
+			cid, cidOK := new(big.Int).SetString(cidStr, 10)
+			if !cidOK {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid chain_id: %s", cidStr)), nil
 			}
 			chainID = cid
@@ -85,22 +80,21 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if !common.IsHexAddress(toStr) {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %s", toStr)), nil
 		}
-		to := common.HexToAddress(toStr)
 
 		valueStr, err := req.RequireString("value")
 		if err != nil {
 			return mcp.NewToolResultError("missing value parameter"), nil
 		}
-		value, ok := new(big.Int).SetString(valueStr, 10)
-		if !ok {
+		_, valueOK := new(big.Int).SetString(valueStr, 10)
+		if !valueOK {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid value: %s", valueStr)), nil
 		}
 
-		var txData []byte
-		if dataHex := req.GetString("data", ""); dataHex != "" && dataHex != "0x" {
-			txData, err = hexToBytes(dataHex)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("invalid data hex: %v", err)), nil
+		dataHex := req.GetString("data", "0x")
+		if dataHex != "" && dataHex != "0x" {
+			_, hexErr := hexToBytes(dataHex)
+			if hexErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid data hex: %v", hexErr)), nil
 			}
 		}
 
@@ -108,8 +102,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing nonce parameter"), nil
 		}
-		nonce, ok := new(big.Int).SetString(nonceStr, 10)
-		if !ok {
+		_, nonceOK := new(big.Int).SetString(nonceStr, 10)
+		if !nonceOK {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid nonce: %s", nonceStr)), nil
 		}
 
@@ -117,8 +111,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing gas_limit parameter"), nil
 		}
-		gasLimit, ok := new(big.Int).SetString(gasLimitStr, 10)
-		if !ok {
+		_, gasOK := new(big.Int).SetString(gasLimitStr, 10)
+		if !gasOK {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid gas_limit: %s", gasLimitStr)), nil
 		}
 
@@ -126,8 +120,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing max_fee_per_gas parameter"), nil
 		}
-		maxFee, ok := new(big.Int).SetString(maxFeeStr, 10)
-		if !ok {
+		_, maxFeeOK := new(big.Int).SetString(maxFeeStr, 10)
+		if !maxFeeOK {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid max_fee_per_gas: %s", maxFeeStr)), nil
 		}
 
@@ -135,50 +129,28 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing max_priority_fee_per_gas parameter"), nil
 		}
-		maxPriorityFee, ok := new(big.Int).SetString(maxPriorityFeeStr, 10)
-		if !ok {
+		_, maxPriorityOK := new(big.Int).SetString(maxPriorityFeeStr, 10)
+		if !maxPriorityOK {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid max_priority_fee_per_gas: %s", maxPriorityFeeStr)), nil
 		}
 
-		payload, err := rlp.EncodeToBytes(reth.DynamicFeeTxWithoutSignature{
-			ChainID:    chainID,
-			Nonce:      nonce.Uint64(),
-			GasTipCap:  maxPriorityFee,
-			GasFeeCap:  maxFee,
-			Gas:        gasLimit.Uint64(),
-			To:         &to,
-			Value:      value,
-			Data:       txData,
-			AccessList: ethtypes.AccessList{},
-		})
+		result := map[string]any{
+			"chain":                    chainName,
+			"chain_id":                 chainID.String(),
+			"to":                       common.HexToAddress(toStr).Hex(),
+			"value":                    valueStr,
+			"data":                     dataHex,
+			"nonce":                    nonceStr,
+			"gas_limit":                gasLimitStr,
+			"max_fee_per_gas":          maxFeeStr,
+			"max_priority_fee_per_gas": maxPriorityFeeStr,
+			"tx_type":                  2,
+		}
+
+		data, err := json.Marshal(result)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("encode tx failed: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
 		}
-		rawBytes := append([]byte{ethtypes.DynamicFeeTxType}, payload...)
-
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         types.EVMChainName(chainID),
-					ChainID:       chainID.String(),
-					Action:        "transfer",
-					SigningMode:   types.SigningModeECDSA,
-					UnsignedTxHex: hex.EncodeToString(rawBytes),
-					TxDetails: map[string]string{
-						"to":                       to.Hex(),
-						"value":                    value.String(),
-						"nonce":                    nonceStr,
-						"gas_limit":                gasLimitStr,
-						"max_fee_per_gas":          maxFee.String(),
-						"max_priority_fee_per_gas": maxPriorityFee.String(),
-						"data":                     "0x" + hex.EncodeToString(txData),
-						"tx_encoding":              types.TxEncodingEIP1559RLP,
-					},
-				},
-			},
-		}
-
-		return result.ToToolResult()
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }
