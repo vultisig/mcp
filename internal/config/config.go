@@ -36,7 +36,8 @@ type Config struct {
 	MayachainURL  string `envconfig:"MAYACHAIN_URL" default:"https://mayanode.mayachain.info"`
 	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
 	JupiterAPIURL string `envconfig:"JUPITER_API_URL" default:"https://api.jup.ag"`
-	XrpRpcURL     string `envconfig:"XRP_RPC_URL" default:"https://s1.ripple.com:51234"`
+	XrpRpcURL       string `envconfig:"XRP_RPC_URL"     default:"https://s1.ripple.com:51234"`
+	EtherscanAPIKey string `envconfig:"ETHERSCAN_API_KEY" default:""`
 }
 
 // ToURLMap converts the EVM RPC config to a chain-name → URL map,

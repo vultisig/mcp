@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/vultisig/mcp/internal/cache"
 )
 
 const (
@@ -37,9 +39,9 @@ type Client struct {
 	http    *http.Client
 	baseURL string
 
-	searchCache *ttlCache[[]SearchCoin]
-	detailCache *ttlCache[*CoinDetail]
-	priceCache  *ttlCache[PriceData]
+	searchCache *cache.TTL[[]SearchCoin]
+	detailCache *cache.TTL[*CoinDetail]
+	priceCache  *cache.TTL[PriceData]
 }
 
 // NewClient creates a CoinGecko API client that routes through the Vultisig proxy.
@@ -47,9 +49,9 @@ func NewClient() *Client {
 	return &Client{
 		http:        &http.Client{Timeout: 30 * time.Second},
 		baseURL:     defaultBaseURL,
-		searchCache: newTTLCache[[]SearchCoin](searchCacheTTL),
-		detailCache: newTTLCache[*CoinDetail](detailCacheTTL),
-		priceCache:  newTTLCache[PriceData](priceCacheTTL),
+		searchCache: cache.NewTTL[[]SearchCoin](searchCacheTTL),
+		detailCache: cache.NewTTL[*CoinDetail](detailCacheTTL),
+		priceCache:  cache.NewTTL[PriceData](priceCacheTTL),
 	}
 }
 
@@ -79,7 +81,7 @@ type searchResponse struct {
 
 // Search queries the CoinGecko /search endpoint. Results are cached for 5 minutes.
 func (c *Client) Search(ctx context.Context, query string) ([]SearchCoin, error) {
-	if cached, ok := c.searchCache.get(query); ok {
+	if cached, ok := c.searchCache.Get(query); ok {
 		return cached, nil
 	}
 
@@ -98,7 +100,7 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchCoin, error)
 		return nil, err
 	}
 
-	c.searchCache.set(query, sr.Coins)
+	c.searchCache.Set(query, sr.Coins)
 	return sr.Coins, nil
 }
 
@@ -130,7 +132,7 @@ type PlatformDetail struct {
 // CoinDetail fetches /coins/{id} with only the fields we need (no market data,
 // tickers, community or developer data). Results are cached for 10 minutes.
 func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error) {
-	if cached, ok := c.detailCache.get(id); ok {
+	if cached, ok := c.detailCache.Get(id); ok {
 		return cached, nil
 	}
 
@@ -152,7 +154,7 @@ func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error)
 		return nil, err
 	}
 
-	c.detailCache.set(id, &cd)
+	c.detailCache.Set(id, &cd)
 	return &cd, nil
 }
 
@@ -163,7 +165,7 @@ func (c *Client) CoinDetail(ctx context.Context, id string) (*CoinDetail, error)
 func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, error) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	cacheKey := "simple:" + id
-	if cached, ok := c.priceCache.get(cacheKey); ok {
+	if cached, ok := c.priceCache.Get(cacheKey); ok {
 		return &cached, nil
 	}
 
@@ -191,7 +193,7 @@ func (c *Client) GetSimplePrice(ctx context.Context, id string) (*PriceData, err
 		return nil, fmt.Errorf("coingecko: no price data for %q", id)
 	}
 
-	c.priceCache.set(cacheKey, pd)
+	c.priceCache.Set(cacheKey, pd)
 	return &pd, nil
 }
 
@@ -204,7 +206,7 @@ func (c *Client) GetTokenPrice(ctx context.Context, platform, contractAddress st
 		cacheAddr = contractAddress // Solana addresses are case-sensitive
 	}
 	cacheKey := "token:" + platform + ":" + cacheAddr
-	if cached, ok := c.priceCache.get(cacheKey); ok {
+	if cached, ok := c.priceCache.Get(cacheKey); ok {
 		return &cached, nil
 	}
 
@@ -236,6 +238,6 @@ func (c *Client) GetTokenPrice(ctx context.Context, platform, contractAddress st
 		return nil, fmt.Errorf("coingecko: no price data for token %s on %s", contractAddress, platform)
 	}
 
-	c.priceCache.set(cacheKey, pd)
+	c.priceCache.Set(cacheKey, pd)
 	return &pd, nil
 }
