@@ -1,34 +1,27 @@
 package tools
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
 
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
-	btcsdk "github.com/vultisig/recipes/sdk/btc"
-
-	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/resolve"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func newBuildBTCSendTool() mcp.Tool {
 	return mcp.NewTool("build_btc_send",
 		mcp.WithDescription(
-			"Build an unsigned Bitcoin PSBT for a send or swap. "+
-				"Automatically selects UTXOs, calculates fees, and handles change. "+
-				"For THORChain swaps, provide the memo parameter to include an OP_RETURN output. "+
+			"Return Bitcoin transaction arguments for a send or swap. "+
+				"Validates addresses and returns inputs/outputs structure for the client to build the PSBT. "+
+				"For THORChain swaps, provide the memo parameter. "+
 				"Requires set_vault_info to be called first.",
 		),
 		mcp.WithString("to_address",
@@ -52,7 +45,7 @@ func newBuildBTCSendTool() mcp.Tool {
 	)
 }
 
-func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.ToolHandlerFunc {
+func handleBuildBTCSend(store *vault.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {
@@ -63,21 +56,22 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 		if err != nil {
 			return mcp.NewToolResultError("missing amount"), nil
 		}
-		amount, err := strconv.ParseInt(amountStr, 10, 64)
-		if err != nil || amount <= 0 {
+		amount, parseErr := strconv.ParseInt(amountStr, 10, 64)
+		if parseErr != nil || amount <= 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %q", amountStr)), nil
 		}
 
 		feeRateFloat := req.GetFloat("fee_rate", 0)
-		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat < 0 || feeRateFloat >= float64(math.MaxUint64) {
+		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat <= 0 {
 			return mcp.NewToolResultError("fee_rate must be a valid positive number"), nil
 		}
 		feeRate := uint64(math.Round(feeRateFloat))
-		if feeRate == 0 {
-			return mcp.NewToolResultError("fee_rate must be greater than 0"), nil
-		}
 
 		memo := req.GetString("memo", "")
+		if memo != "" && len(memo) > 80 {
+			return mcp.NewToolResultError(fmt.Sprintf("memo too long: %d bytes (max 80)", len(memo))), nil
+		}
+
 		explicitAddr := req.GetString("address", "")
 
 		sessionID := resolve.SessionIDFromCtx(ctx)
@@ -86,7 +80,7 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
 		}
 
-		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Bitcoin)
+		senderAddr, _, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Bitcoin)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Bitcoin address: %v", err)), nil
 		}
@@ -95,72 +89,10 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 				"address %q does not match vault-derived address %q", explicitAddr, senderAddr)), nil
 		}
 
-		pubKeyBytes, err := hex.DecodeString(derivedPubKey)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("decode derived pubkey: %v", err)), nil
-		}
-
-		dashboard, err := bcClient.GetAddressDashboard(ctx, "Bitcoin", senderAddr)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("fetch UTXOs: %v", err)), nil
-		}
-
-		utxos := make([]btcsdk.UTXO, 0, len(dashboard.UTXOs))
-		for _, u := range dashboard.UTXOs {
-			if u.Value <= 0 || u.Index < 0 {
-				continue
-			}
-			utxos = append(utxos, btcsdk.UTXO{
-				TxHash: u.TransactionHash,
-				Index:  uint32(u.Index),
-				Value:  uint64(u.Value),
-			})
-		}
-
 		btcChain := utxoChains["Bitcoin"]
-
-		recipientScript, err := btcChain.addressToPkScript(toAddress)
+		_, err = btcChain.addressToPkScript(toAddress)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to_address: %v", err)), nil
-		}
-
-		changeScript, err := btcChain.addressToPkScript(senderAddr)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid sender address: %v", err)), nil
-		}
-
-		outputs := []*wire.TxOut{
-			{Value: amount, PkScript: recipientScript},
-			{Value: 0, PkScript: changeScript},
-		}
-
-		if memo != "" {
-			if len(memo) > 80 {
-				return mcp.NewToolResultError(fmt.Sprintf("memo too long: %d bytes (max 80)", len(memo))), nil
-			}
-			memoScript, err := txscript.NullDataScript([]byte(memo))
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("create OP_RETURN script: %v", err)), nil
-			}
-			outputs = append(outputs, &wire.TxOut{Value: 0, PkScript: memoScript})
-		}
-
-		changeIdx := 1
-		utxoBuilder := btcsdk.Mainnet()
-		result, err := utxoBuilder.Build(utxos, outputs, changeIdx, feeRate, pubKeyBytes)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("build transaction: %v", err)), nil
-		}
-
-		err = btcsdk.PopulatePSBTMetadata(result, bcClient.ChainFetcherWithCtx(ctx, "Bitcoin"))
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("populate PSBT metadata: %v", err)), nil
-		}
-
-		var buf bytes.Buffer
-		err = result.Packet.Serialize(&buf)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("serialize PSBT: %v", err)), nil
 		}
 
 		action := "transfer"
@@ -168,28 +100,21 @@ func handleBuildBTCSend(store *vault.Store, bcClient *blockchair.Client) server.
 			action = "swap"
 		}
 
-		txResult := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         "Bitcoin",
-					Action:        action,
-					SigningMode:   types.SigningModeECDSA,
-					UnsignedTxHex: hex.EncodeToString(buf.Bytes()),
-					TxDetails: map[string]string{
-						"ticker":      "BTC",
-						"from":        senderAddr,
-						"to":          toAddress,
-						"amount":      amountStr,
-						"fee":         strconv.FormatUint(result.Fee, 10),
-						"change":      strconv.FormatInt(result.ChangeAmount, 10),
-						"input_count": strconv.Itoa(len(result.SelectedUTXOs)),
-						"tx_encoding": types.TxEncodingPSBT,
-					},
-				},
-			},
+		result := map[string]any{
+			"chain":       "Bitcoin",
+			"action":      action,
+			"from":        senderAddr,
+			"to":          toAddress,
+			"amount":      amount,
+			"fee_rate":    feeRate,
+			"memo":        memo,
+			"tx_encoding": "psbt",
 		}
 
-		return txResult.ToToolResult()
+		data, err := json.Marshal(result)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }

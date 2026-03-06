@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -12,18 +12,15 @@ import (
 
 	"github.com/vultisig/mcp/internal/resolve"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func newBuildSPLTransferTxTool() mcp.Tool {
 	return mcp.NewTool("build_spl_transfer_tx",
 		mcp.WithDescription(
-			"Build an unsigned SPL token transfer transaction. "+
-				"Auto-detects token program (SPL vs Token-2022) and derives associated token accounts. "+
-				"If the destination ATA does not exist, includes a create-ATA instruction in the transaction. "+
-				"For native SOL transfers (including wSOL mint So1111...1112), use build_solana_tx instead. "+
-				"Returns a TransactionResult with signing_mode=eddsa_ed25519.",
+			"Return SPL token transfer arguments for the client to build and sign the transaction. "+
+				"Detects token program (SPL vs Token-2022) and returns token account addresses. "+
+				"For native SOL transfers (including wSOL mint So1111...1112), use build_solana_tx instead.",
 		),
 		mcp.WithString("from",
 			mcp.Description("Sender's Solana address (base58). Optional if vault info is set."),
@@ -93,31 +90,34 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 			return mcp.NewToolResultError("native SOL transfers (including wSOL) should use build_solana_tx instead"), nil
 		}
 
-		txBytes, err := solClient.BuildTokenTransfer(ctx, mintPubkey, fromPubkey, toPubkey, amount.Uint64(), decimals, tokenProgram)
+		fromATA, _, err := solanaclient.FindAssociatedTokenAddress(fromPubkey, mintPubkey, tokenProgram)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("build spl transfer tx failed: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("derive sender ATA: %v", err)), nil
 		}
 
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         "Solana",
-					Action:        "spl_transfer",
-					SigningMode:   types.SigningModeEdDSA,
-					UnsignedTxHex: hex.EncodeToString(txBytes),
-					TxDetails: map[string]string{
-						"from":          fromAddr,
-						"to":            toStr,
-						"mint":          mintStr,
-						"amount":        amountStr,
-						"decimals":      fmt.Sprintf("%d", decimals),
-						"token_program": tokenProgram.String(),
-					},
-				},
-			},
+		toATA, _, err := solanaclient.FindAssociatedTokenAddress(toPubkey, mintPubkey, tokenProgram)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("derive recipient ATA: %v", err)), nil
 		}
 
-		return result.ToToolResult()
+		result := map[string]any{
+			"chain":         "Solana",
+			"action":        "spl_transfer",
+			"from":          fromAddr,
+			"to":            toStr,
+			"mint":          mintStr,
+			"amount":        amountStr,
+			"decimals":      decimals,
+			"token_program": tokenProgram.String(),
+			"from_ata":      fromATA.String(),
+			"to_ata":        toATA.String(),
+			"signing_mode":  "eddsa_ed25519",
+		}
+
+		data, err := json.Marshal(result)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }
