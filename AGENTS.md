@@ -39,3 +39,13 @@ go test ./... -race
 - ABI encoding errors = lost funds. Test encoding/decoding thoroughly.
 - Vault keys stored in-memory only (per-session, never persisted)
 - ERC-20 queries use raw ABI encoding (no abigen)
+
+## Knowledge Base
+
+For deeper context beyond this file, see [vultisig-knowledge](https://github.com/vultisig/vultisig-knowledge).
+
+Key docs for this repo:
+- [repos/mcp.md](https://github.com/vultisig/vultisig-knowledge/blob/main/repos/mcp.md)
+- [architecture/mpc-tss-explained.md](https://github.com/vultisig/vultisig-knowledge/blob/main/architecture/mpc-tss-explained.md)
+- [coding/gotchas.md](https://github.com/vultisig/vultisig-knowledge/blob/main/coding/gotchas.md)
+- [coding/dependencies.md](https://github.com/vultisig/vultisig-knowledge/blob/main/coding/dependencies.md)
