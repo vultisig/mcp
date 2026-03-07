@@ -39,6 +39,7 @@ EOF
 ### 4. Run Checks
 ```bash
 go vet ./...
+go test ./...
 ```
 
 ### 5. Push Current Branch

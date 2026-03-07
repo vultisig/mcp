@@ -4,6 +4,10 @@ about: Report a bug in the MCP server
 title: "Fix "
 labels: bug
 assignees: ""
+files:
+  read: []
+  write: []
+verify: []
 ---
 
 ## Bug Description

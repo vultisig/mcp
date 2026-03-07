@@ -26,6 +26,7 @@ git branch --show-current
 ### 3. Run Checks
 ```bash
 go vet ./...
+go test ./...
 ```
 
 ### 4. Push Current Branch

@@ -68,6 +68,13 @@ SECRET_PATTERNS=(
   "\.pfx$"
   "\.keystore$"
   "\.jks$"
+  "\.aws/"
+  "id_rsa"
+  "id_dsa"
+  "id_ecdsa"
+  "id_ed25519"
+  "ssh_config"
+  "authorized_keys"
 )
 
 for pattern in "${SECRET_PATTERNS[@]}"; do
@@ -79,7 +86,7 @@ for pattern in "${SECRET_PATTERNS[@]}"; do
 done
 
 # ── Environment variable exposure ─────────────────────────────────────────
-if echo "$INPUT" | grep -qiE "(printenv|export -p)|echo.*(TOKEN|API_KEY|SECRET|PASSWORD|CREDENTIAL)|env[[:space:]]*$|env[[:space:]]*\|"; then
+if echo "$INPUT" | grep -qiE "(printenv|export -p)|echo[[:space:]].*(\\$\\{?(TOKEN|API_KEY|SECRET|PASSWORD|CREDENTIAL))|env[[:space:]]*$|env[[:space:]]*\|"; then
   echo "BLOCKED: Environment variable exposure detected."
   echo "Agents must not read or print secrets from the environment."
   exit 2
