@@ -50,23 +50,23 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	toolmeta.Register(s, newBuildBTCSendTool(), handleBuildBTCSend(store, bcClient), "send", "bitcoin")
 
 	// Litecoin
-	toolmeta.Register(s, newLTCFeeRateTool(), handleLTCFeeRate(tcClient), "fee")
-	toolmeta.Register(s, newBuildLTCSendTool(), handleBuildLTCSend(store, bcClient), "send")
+	toolmeta.Register(s, newLTCFeeRateTool(), handleLTCFeeRate(tcClient), "fee", "litecoin")
+	toolmeta.Register(s, newBuildLTCSendTool(), handleBuildLTCSend(store, bcClient), "send", "litecoin")
 
 	// Dogecoin
-	toolmeta.Register(s, newDOGEFeeRateTool(), handleDOGEFeeRate(tcClient), "fee")
-	toolmeta.Register(s, newBuildDOGESendTool(), handleBuildDOGESend(store, bcClient), "send")
+	toolmeta.Register(s, newDOGEFeeRateTool(), handleDOGEFeeRate(tcClient), "fee", "dogecoin")
+	toolmeta.Register(s, newBuildDOGESendTool(), handleBuildDOGESend(store, bcClient), "send", "dogecoin")
 
 	// Bitcoin Cash
-	toolmeta.Register(s, newBCHFeeRateTool(), handleBCHFeeRate(tcClient), "fee")
-	toolmeta.Register(s, newBuildBCHSendTool(), handleBuildBCHSend(store, bcClient), "send")
+	toolmeta.Register(s, newBCHFeeRateTool(), handleBCHFeeRate(tcClient), "fee", "bitcoincash")
+	toolmeta.Register(s, newBuildBCHSendTool(), handleBuildBCHSend(store, bcClient), "send", "bitcoincash")
 
 	// Dash
-	toolmeta.Register(s, newDASHFeeRateTool(), handleDASHFeeRate(mcClient), "fee")
-	toolmeta.Register(s, newBuildDASHSendTool(), handleBuildDASHSend(store, bcClient), "send")
+	toolmeta.Register(s, newDASHFeeRateTool(), handleDASHFeeRate(mcClient), "fee", "dash")
+	toolmeta.Register(s, newBuildDASHSendTool(), handleBuildDASHSend(store, bcClient), "send", "dash")
 
 	// Zcash
-	toolmeta.Register(s, newBuildZECSendTool(), handleBuildZECSend(store, bcClient), "send")
+	toolmeta.Register(s, newBuildZECSendTool(), handleBuildZECSend(store, bcClient), "send", "zcash")
 
 	// MayaChain
 	toolmeta.Register(s, newMayaFeeRateTool(), handleMayaFeeRate(mcClient), "fee")
