@@ -37,8 +37,8 @@ fi
 
 # ── Destructive git operations ─────────────────────────────────────────────
 DESTRUCTIVE_PATTERNS=(
-  "git push.*--force[^-]"
-  "git push.*-f "
+  "git push.*--force([^-]|$)"
+  "git push.*-f( |$)"
   "--no-verify"
   "git reset --hard"
   "git checkout \."
@@ -62,16 +62,18 @@ SECRET_PATTERNS=(
   "\.env\."
   "/secret"
   "/credential"
+  "credentials\."
+  "secret\."
+  "keystore"
   "\.pem$"
   "\.key$"
   "\.p12$"
   "\.pfx$"
-  "\.keystore$"
   "\.jks$"
-  "^internal/tools/"
-  "^internal/protocols/"
-  "^internal/vault/store\.go$"
-  "^internal/skills/files/"
+  "internal/tools/"
+  "internal/protocols/"
+  "internal/vault/store\.go"
+  "internal/skills/files/"
 )
 
 for pattern in "${SECRET_PATTERNS[@]}"; do
