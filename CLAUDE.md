@@ -1,14 +1,86 @@
-# Vultisig MCP Server
+# Vultisig MCP Server - Claude Code Instructions
 
-## Build & Run
+## Security Tier
+
+STANDARD
+
+## Critical Boundaries
+
+- `internal/vault/` — Per-session vault state with cryptographic key material. Handle with care.
+- `go.mod` replace directives — Required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`. Do not remove.
+- Environment variable defaults — RPC URLs belong in `config.go` (envconfig defaults), not in client constructors.
+
+## Project Overview
+
+**Vultisig MCP** is a Model Context Protocol (MCP) server that exposes blockchain tools (balance queries, transaction building, token search, ABI encoding/decoding) for multi-chain cryptocurrency operations. It supports EVM chains, UTXO chains (BTC, LTC, DOGE, BCH, DASH, ZEC), Solana, and XRP.
+
+**Repository**: https://github.com/vultisig/mcp
+
+## Tech Stack
+
+- **Language**: Go 1.25+
+- **MCP Framework**: `github.com/mark3labs/mcp-go` (stdio + HTTP transport)
+- **Configuration**: `github.com/kelseyhightower/envconfig` (struct-tag env config)
+- **Blockchain clients**: go-ethereum, btcsuite/btcd, gagliardetto/solana-go, xyield/xrpl-go
+- **Vultisig SDKs**: vultisig-go (address derivation), recipes (tx building, swaps)
+- **Build System**: Go modules
+
+## Code Conventions
+
+### Go Style (org-level)
+- **No inline error assignment**: Don't use `if err := fn(); err != nil {}`. Define the variable first, then `if` on the next line.
+- **Minimal comments**: Avoid adding comments to code. Allowed only for super-tricky parts.
+- **No variable shadowing in closures**: Avoid variable name shadows in closures.
+- **Format after editing**: After writing or editing any Go file, run `gofmt -w <file>`.
+
+### MCP-Specific Conventions
+- User-facing errors use `mcp.NewToolResultError()` (IsError: true). Go errors for protocol-level failures only.
+- Session ID extracted via `server.ClientSessionFromContext(ctx).SessionID()`, falls back to `"default"`.
+- ERC-20 queries use raw ABI encoding (no abigen).
+- Replace directives in go.mod are required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`.
+- EVM client pool (`internal/evm.Pool`) lazily creates per-chain clients on first use and caches them.
+- Default URLs belong in `config.go` (envconfig defaults), not in client constructors.
+- All logs go to stderr (prefixed `[mcp]`), keeping stdout clean for the stdio MCP protocol.
+
+## Quick Commands
 
 ```bash
 go build ./cmd/mcp-server/       # Build
 go test ./...                     # Run all tests
 go vet ./...                      # Lint
+gofmt -w .                        # Format all Go files
 ./mcp-server                      # Run (stdio transport, default)
 ./mcp-server -http :8080          # Run (HTTP transport on port 8080)
 ```
+
+## Git Workflow
+
+### Branch Naming
+- Format: `{issue-number}-{slugified-issue-title}` (e.g., `42-add-xrp-balance-tool`)
+- No issue: descriptive kebab-case, no prefixes
+- Keep branch names lowercase with hyphens
+
+### Commit Messages
+- Use conventional commit style
+- Focus on "why" rather than "what"
+- Add co-author:
+  ```
+  Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+  ```
+
+### Pull Requests
+- Target branch: `main`
+- Use descriptive PR titles (under 70 characters)
+- Include summary with bullet points
+- Add test plan
+- Ensure all CI checks pass
+
+## Testing Conventions
+
+- Write table-driven tests where appropriate
+- Use `testing.T` and subtests (`t.Run`)
+- Mock external HTTP calls (RPC endpoints, APIs)
+- Test error paths, not just happy paths
 
 ## Flags
 
@@ -142,11 +214,13 @@ All logs go to stderr (prefixed `[mcp]`), keeping stdout clean for the stdio MCP
 
 Logging is implemented via mcp-go `ToolHandlerMiddleware` (for tool call timing) and `Hooks` (for session lifecycle).
 
-## Conventions
+## Knowledge Base
 
-- User-facing errors use `mcp.NewToolResultError()` (IsError: true). Go errors for protocol-level failures only.
-- Session ID extracted via `server.ClientSessionFromContext(ctx).SessionID()`, falls back to `"default"`.
-- ERC-20 queries use raw ABI encoding (no abigen).
-- Replace directives in go.mod are required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`.
-- EVM client pool (`internal/evm.Pool`) lazily creates per-chain clients on first use and caches them.
-- Default URLs belong in `config.go` (envconfig defaults), not in client constructors.
+For deeper context, see [vultisig-knowledge](https://github.com/vultisig/vultisig-knowledge). Read only when needed:
+
+| Situation | Read |
+|-----------|------|
+| Touching crypto/signing code | [architecture/mpc-tss-explained.md](https://github.com/vultisig/vultisig-knowledge/blob/main/architecture/mpc-tss-explained.md) |
+| Signing flow details | [architecture/signing-flow.md](https://github.com/vultisig/vultisig-knowledge/blob/main/architecture/signing-flow.md) |
+| Cross-repo gotchas | [coding/gotchas.md](https://github.com/vultisig/vultisig-knowledge/blob/main/coding/gotchas.md) |
+| Cross-platform changes | [repos/index.md](https://github.com/vultisig/vultisig-knowledge/blob/main/repos/index.md) |
