@@ -4,14 +4,17 @@ about: Report a bug in the MCP server
 title: "Fix "
 labels: bug
 assignees: ""
-files:
-  read: []
-  write: []
-verify: []
 ---
 
 ## Bug Description
 <!-- A clear description of the bug -->
+
+## Files
+- **Read**: <!-- files for context -->
+- **Write**: <!-- files to modify -->
+
+## Verify
+<!-- Commands that prove the fix works, e.g. go test ./... -->
 
 ## Steps to Reproduce
 1.

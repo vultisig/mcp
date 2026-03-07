@@ -10,7 +10,13 @@ if [ -z "$MODIFIED" ]; then
   exit 0
 fi
 
-OUTPUT=$(go vet ./... 2>&1)
+PACKAGES=$(echo "$MODIFIED" | xargs -n1 dirname | sort -u | sed 's|^|./|')
+
+if [ -z "$PACKAGES" ]; then
+  exit 0
+fi
+
+OUTPUT=$(echo "$PACKAGES" | xargs go vet 2>&1)
 VET_EXIT=$?
 echo "$OUTPUT" | tail -5
 if [ $VET_EXIT -ne 0 ]; then
