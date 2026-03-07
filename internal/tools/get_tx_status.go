@@ -50,7 +50,6 @@ func newGetTxStatusTool() mcp.Tool {
 			mcp.Description("Transaction hash (0x-prefixed for EVM, base58 for Solana, hex for UTXO/XRP)."),
 			mcp.Required(),
 		),
-		WithCategory("utility"),
 	)
 }
 

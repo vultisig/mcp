@@ -41,7 +41,6 @@ func newBuildSolanaSwapTool() mcp.Tool {
 		mcp.WithNumber("slippage_bps",
 			mcp.Description("Slippage tolerance in basis points (default: 100 = 1%)."),
 		),
-		WithCategory("swap", "solana"),
 	)
 }
 

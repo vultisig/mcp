@@ -57,7 +57,6 @@ func newGetAddressTool() mcp.Tool {
 			mcp.Required(),
 			mcp.Enum(supportedChains...),
 		),
-		WithCategory("utility"),
 	)
 }
 

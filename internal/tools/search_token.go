@@ -61,7 +61,6 @@ func newSearchTokenTool() mcp.Tool {
 			mcp.Description("Token ticker symbol (e.g. USDC), name (e.g. Uniswap), or contract address (e.g. 0xa0b86991...)"),
 			mcp.Required(),
 		),
-		WithCategory("utility"),
 	)
 }
 

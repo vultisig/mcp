@@ -23,7 +23,6 @@ func newABIDecodeTool() mcp.Tool {
 			mcp.Description("Comma-separated Solidity types (e.g. \"uint256,address,bool\")."),
 			mcp.Required(),
 		),
-		WithCategory("contract"),
 	)
 }
 

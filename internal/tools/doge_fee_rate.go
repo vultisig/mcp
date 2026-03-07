@@ -14,7 +14,6 @@ import (
 func newDOGEFeeRateTool() mcp.Tool {
 	return mcp.NewTool("doge_fee_rate",
 		mcp.WithDescription("Get the recommended Dogecoin fee rate in sat/vB from THORChain inbound addresses."),
-		WithCategory("fee"),
 	)
 }
 

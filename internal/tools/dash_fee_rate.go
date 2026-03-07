@@ -14,7 +14,6 @@ import (
 func newDASHFeeRateTool() mcp.Tool {
 	return mcp.NewTool("dash_fee_rate",
 		mcp.WithDescription("Get the recommended Dash fee rate in sat/vB from MayaChain inbound addresses."),
-		WithCategory("fee"),
 	)
 }
 

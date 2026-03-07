@@ -22,7 +22,6 @@ func newMayaFeeRateTool() mcp.Tool {
 			mcp.Required(),
 			mcp.Enum("BTC", "ETH", "ARB", "ZEC", "DASH", "THOR"),
 		),
-		WithCategory("fee"),
 	)
 }
 

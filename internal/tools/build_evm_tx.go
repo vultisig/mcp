@@ -59,7 +59,6 @@ func newBuildEVMTxTool() mcp.Tool {
 		mcp.WithString("chain_id",
 			mcp.Description("Chain ID override (decimal string). Defaults to the chain's known ID."),
 		),
-		WithCategory("send", "evm"),
 	)
 }
 

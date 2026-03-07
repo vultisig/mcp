@@ -25,7 +25,6 @@ func newSetVaultInfoTool() mcp.Tool {
 			mcp.Description("Hex-encoded 32-byte chain code for BIP-32 derivation"),
 			mcp.Required(),
 		),
-		WithCategory("utility"),
 	)
 }
 

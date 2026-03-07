@@ -17,7 +17,6 @@ func newConvertAmountTool() mcp.Tool {
 		mcp.WithString("amount", mcp.Description("The amount to convert"), mcp.Required()),
 		mcp.WithNumber("decimals", mcp.Description("Number of decimal places for the token (e.g. 18 for ETH, 6 for USDC)"), mcp.Required()),
 		mcp.WithString("direction", mcp.Description("\"to_base\" (human→base) or \"to_human\" (base→human)"), mcp.Required()),
-		WithCategory("utility"),
 	)
 }
 

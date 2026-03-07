@@ -14,7 +14,6 @@ import (
 func newLTCFeeRateTool() mcp.Tool {
 	return mcp.NewTool("ltc_fee_rate",
 		mcp.WithDescription("Get the recommended Litecoin fee rate in sat/vB from THORChain inbound addresses."),
-		WithCategory("fee"),
 	)
 }
 

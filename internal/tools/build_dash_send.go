@@ -49,7 +49,6 @@ func newBuildDASHSendTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Sender Dash address. Falls back to vault-derived address if omitted."),
 		),
-		WithCategory("send"),
 	)
 }
 

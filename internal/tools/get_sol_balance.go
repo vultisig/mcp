@@ -22,7 +22,6 @@ func newGetSOLBalanceTool() mcp.Tool {
 		mcp.WithString("address",
 			mcp.Description("Solana address (base58). Optional if vault info is set."),
 		),
-		WithCategory("balance", "solana"),
 	)
 }
 

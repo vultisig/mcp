@@ -35,7 +35,6 @@ func newEVMCheckAllowanceTool() mcp.Tool {
 			mcp.Description("Address that is allowed to spend tokens (e.g. DEX router contract)."),
 			mcp.Required(),
 		),
-		WithCategory("contract", "evm"),
 	)
 }
 
