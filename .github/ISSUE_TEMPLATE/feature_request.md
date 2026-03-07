@@ -4,16 +4,17 @@ about: Request a new feature for agent or human implementation
 labels: enhancement
 ---
 
----
+<!-- Fill in the AGENT block: priority = critical|high|medium|low, size = tiny|small|medium -->
+<!-- AGENT
 type: "feature"
-priority: ""              # critical | high | medium | low
-size: ""                  # tiny (<1 file) | small (1-3 files) | medium (3-8 files)
-platform: []              # ios | android | web | desktop | sdk | server | docs
+priority: ""
+size: ""
+platform: [mcp]
 files:
-  read: []                # Files for context
-  write: []               # Files to create or modify
-verify: []                # Commands to confirm completion
----
+  read: []
+  write: []
+verify: ["go test ./... -race"]
+-->
 
 # [Add/Implement] [WHAT] [WHERE]
 
