@@ -70,7 +70,6 @@ func (c *Client) ResolveSelector(ctx context.Context, selector string) ([]Signat
 }
 
 func normalizeSelector(selector string) string {
-	selector = selector
 	if len(selector) == 10 && (selector[:2] == "0x" || selector[:2] == "0X") {
 		return selector
 	}
