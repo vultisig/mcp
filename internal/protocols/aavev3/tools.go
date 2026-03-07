@@ -17,22 +17,10 @@ import (
 
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
-
-// withCategory returns a ToolOption that sets the "categories" key in _meta.
-func withCategory(categories ...string) mcp.ToolOption {
-	return func(tool *mcp.Tool) {
-		if tool.Meta == nil {
-			tool.Meta = &mcp.Meta{}
-		}
-		if tool.Meta.AdditionalFields == nil {
-			tool.Meta.AdditionalFields = make(map[string]any)
-		}
-		tool.Meta.AdditionalFields["categories"] = categories
-	}
-}
 
 const (
 	gasLimitSupply = 300_000
@@ -52,12 +40,12 @@ func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *
 	deploy, _ := aavev3sdk.GetDeployment(chainID)
 	aaveClient := aavev3sdk.NewClient(ethClient, deploy)
 
-	s.AddTool(newDepositTool(), handleDeposit(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newWithdrawTool(), handleWithdraw(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newBorrowTool(), handleBorrow(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newRepayTool(), handleRepay(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newGetBalancesTool(), handleGetBalances(store, aaveClient))
-	s.AddTool(newGetRatesTool(), handleGetRates(aaveClient))
+	toolmeta.Register(s, newDepositTool(), handleDeposit(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newWithdrawTool(), handleWithdraw(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newBorrowTool(), handleBorrow(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newRepayTool(), handleRepay(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newGetBalancesTool(), handleGetBalances(store, aaveClient), "aave")
+	toolmeta.Register(s, newGetRatesTool(), handleGetRates(aaveClient), "aave")
 }
 
 func newDepositTool() mcp.Tool {
@@ -66,7 +54,6 @@ func newDepositTool() mcp.Tool {
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
 		mcp.WithString("amount", mcp.Description("Amount to deposit in human-readable units (e.g. \"100.5\") or \"max\" for full balance"), mcp.Required()),
 		mcp.WithString("address", mcp.Description("Depositor's Ethereum address (0x-prefixed). Optional if vault info is set.")),
-		withCategory("aave"),
 	)
 }
 
@@ -76,7 +63,6 @@ func newWithdrawTool() mcp.Tool {
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
 		mcp.WithString("amount", mcp.Description("Amount to withdraw in human-readable units or \"max\""), mcp.Required()),
 		mcp.WithString("address", mcp.Description("Withdrawer's Ethereum address (0x-prefixed). Optional if vault info is set.")),
-		withCategory("aave"),
 	)
 }
 
@@ -86,7 +72,6 @@ func newBorrowTool() mcp.Tool {
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
 		mcp.WithString("amount", mcp.Description("Amount to borrow in human-readable units"), mcp.Required()),
 		mcp.WithString("address", mcp.Description("Borrower's Ethereum address (0x-prefixed). Optional if vault info is set.")),
-		withCategory("aave"),
 	)
 }
 
@@ -96,7 +81,6 @@ func newRepayTool() mcp.Tool {
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
 		mcp.WithString("amount", mcp.Description("Amount to repay in human-readable units or \"max\""), mcp.Required()),
 		mcp.WithString("address", mcp.Description("Repayer's Ethereum address (0x-prefixed). Optional if vault info is set.")),
-		withCategory("aave"),
 	)
 }
 
@@ -104,7 +88,6 @@ func newGetBalancesTool() mcp.Tool {
 	return mcp.NewTool("aave_v3_get_balances",
 		mcp.WithDescription("Query Aave V3 account summary: total collateral, total debt, available borrows (all in USD), liquidation threshold, LTV, and health factor."),
 		mcp.WithString("address", mcp.Description("Ethereum address (0x-prefixed). Optional if vault info is set.")),
-		withCategory("aave"),
 	)
 }
 
@@ -112,7 +95,6 @@ func newGetRatesTool() mcp.Tool {
 	return mcp.NewTool("aave_v3_get_rates",
 		mcp.WithDescription("Query Aave V3 supply APY, variable borrow APY, and reserve configuration for a given token."),
 		mcp.WithString("asset", mcp.Description("ERC-20 token contract address (0x-prefixed)"), mcp.Required()),
-		withCategory("aave"),
 	)
 }
 
