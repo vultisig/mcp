@@ -10,6 +10,7 @@ import (
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	evmclient "github.com/vultisig/mcp/internal/evm"
+	"github.com/vultisig/mcp/internal/fourbyte"
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
@@ -20,7 +21,7 @@ import (
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client) error {
 	s.AddTool(newSetVaultInfoTool(), handleSetVaultInfo(store))
 	s.AddTool(newGetAddressTool(), handleGetAddress(store))
 	s.AddTool(newEVMGetBalanceTool(), handleEVMGetBalance(store, pool))
@@ -55,6 +56,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	s.AddTool(newBuildSolanaSwapTool(), handleBuildSolanaSwap(store, jupClient))
 	s.AddTool(newGetXRPBalanceTool(), handleGetXRPBalance(store, xrpClient))
 	s.AddTool(newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient))
+	s.AddTool(newResolveSelectorTool(), handleResolveSelector(fbClient))
 
 	// Polymarket prediction market tools
 	pmtools.RegisterAll(s, store, pool)
