@@ -10,6 +10,7 @@ import (
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	evmclient "github.com/vultisig/mcp/internal/evm"
+	"github.com/vultisig/mcp/internal/fourbyte"
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
@@ -21,7 +22,7 @@ import (
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client) error {
 	// Utility tools (always-on)
 	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
 	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
@@ -44,6 +45,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	// ABI tools
 	toolmeta.Register(s, newABIEncodeTool(), handleABIEncode(), "contract")
 	toolmeta.Register(s, newABIDecodeTool(), handleABIDecode(), "contract")
+	toolmeta.Register(s, newResolveSelectorTool(), handleResolveSelector(fbClient), "contract")
 
 	// Bitcoin
 	toolmeta.Register(s, newBTCFeeRateTool(), handleBTCFeeRate(tcClient), "fee", "bitcoin")
