@@ -71,7 +71,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	toolmeta.Register(s, newBuildZECSendTool(), handleBuildZECSend(store, bcClient), "send", "zcash")
 
 	// MayaChain
-	toolmeta.Register(s, newMayaFeeRateTool(), handleMayaFeeRate(mcClient), "fee")
+	toolmeta.Register(s, newMayaFeeRateTool(), handleMayaFeeRate(mcClient), "fee", "mayachain")
 
 	// Solana
 	toolmeta.Register(s, newGetSOLBalanceTool(), handleGetSOLBalance(store, solClient), "balance", "solana")
