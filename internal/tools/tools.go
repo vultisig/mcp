@@ -14,49 +14,75 @@ import (
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
+	"github.com/vultisig/mcp/internal/thorchain"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	pmtools "github.com/vultisig/mcp/internal/tools/polymarket"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
-	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/vault"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
 func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client) error {
-	s.AddTool(newSetVaultInfoTool(), handleSetVaultInfo(store))
-	s.AddTool(newGetAddressTool(), handleGetAddress(store))
-	s.AddTool(newEVMGetBalanceTool(), handleEVMGetBalance(store, pool))
-	s.AddTool(newEVMGetTokenBalanceTool(), handleEVMGetTokenBalance(store, pool))
-	s.AddTool(newEVMCheckAllowanceTool(), handleEVMCheckAllowance(store, pool))
-	s.AddTool(newSearchTokenTool(), handleSearchToken(cgClient))
-	s.AddTool(newGetPriceTool(), handleGetPrice(cgClient))
-	s.AddTool(newGetTxStatusTool(), handleGetTxStatus(pool, bcClient, solClient, xrpClient))
-	s.AddTool(newBuildSwapTxTool(), handleBuildSwapTx(swapSvc))
-	s.AddTool(newConvertAmountTool(), handleConvertAmount())
-	s.AddTool(newABIEncodeTool(), handleABIEncode())
-	s.AddTool(newABIDecodeTool(), handleABIDecode())
-	s.AddTool(newEVMCallTool(), handleEVMCall(pool))
-	s.AddTool(newEVMTxInfoTool(), handleEVMTxInfo(store, pool))
-	s.AddTool(newBuildEVMTxTool(), handleBuildEVMTx())
-	s.AddTool(newBTCFeeRateTool(), handleBTCFeeRate(tcClient))
-	s.AddTool(newBuildBTCSendTool(), handleBuildBTCSend(store, bcClient))
-	s.AddTool(newLTCFeeRateTool(), handleLTCFeeRate(tcClient))
-	s.AddTool(newBuildLTCSendTool(), handleBuildLTCSend(store, bcClient))
-	s.AddTool(newDOGEFeeRateTool(), handleDOGEFeeRate(tcClient))
-	s.AddTool(newBuildDOGESendTool(), handleBuildDOGESend(store, bcClient))
-	s.AddTool(newBCHFeeRateTool(), handleBCHFeeRate(tcClient))
-	s.AddTool(newBuildBCHSendTool(), handleBuildBCHSend(store, bcClient))
-	s.AddTool(newDASHFeeRateTool(), handleDASHFeeRate(mcClient))
-	s.AddTool(newBuildDASHSendTool(), handleBuildDASHSend(store, bcClient))
-	s.AddTool(newBuildZECSendTool(), handleBuildZECSend(store, bcClient))
-	s.AddTool(newMayaFeeRateTool(), handleMayaFeeRate(mcClient))
-	s.AddTool(newGetSOLBalanceTool(), handleGetSOLBalance(store, solClient))
-	s.AddTool(newGetSPLTokenBalanceTool(), handleGetSPLTokenBalance(store, solClient))
-	s.AddTool(newBuildSolanaTxTool(), handleBuildSolanaTx(store, solClient))
-	s.AddTool(newBuildSPLTransferTxTool(), handleBuildSPLTransferTx(store, solClient))
-	s.AddTool(newBuildSolanaSwapTool(), handleBuildSolanaSwap(store, jupClient))
-	s.AddTool(newGetXRPBalanceTool(), handleGetXRPBalance(store, xrpClient))
-	s.AddTool(newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient))
-	s.AddTool(newResolveSelectorTool(), handleResolveSelector(fbClient))
+	// Utility tools (always-on)
+	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
+	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
+	toolmeta.Register(s, newSearchTokenTool(), handleSearchToken(cgClient), "utility")
+	toolmeta.Register(s, newGetPriceTool(), handleGetPrice(cgClient), "utility")
+	toolmeta.Register(s, newGetTxStatusTool(), handleGetTxStatus(pool, bcClient, solClient, xrpClient), "utility")
+	toolmeta.Register(s, newConvertAmountTool(), handleConvertAmount(), "utility")
+
+	// Swap
+	toolmeta.Register(s, newBuildSwapTxTool(), handleBuildSwapTx(swapSvc), "swap")
+
+	// EVM tools
+	toolmeta.Register(s, newEVMGetBalanceTool(), handleEVMGetBalance(store, pool), "balance", "evm")
+	toolmeta.Register(s, newEVMGetTokenBalanceTool(), handleEVMGetTokenBalance(store, pool), "balance", "evm")
+	toolmeta.Register(s, newEVMCheckAllowanceTool(), handleEVMCheckAllowance(store, pool), "contract", "evm")
+	toolmeta.Register(s, newEVMCallTool(), handleEVMCall(pool), "contract", "evm")
+	toolmeta.Register(s, newEVMTxInfoTool(), handleEVMTxInfo(store, pool), "contract", "evm", "fee")
+	toolmeta.Register(s, newBuildEVMTxTool(), handleBuildEVMTx(), "send", "evm")
+
+	// ABI tools
+	toolmeta.Register(s, newABIEncodeTool(), handleABIEncode(), "contract")
+	toolmeta.Register(s, newABIDecodeTool(), handleABIDecode(), "contract")
+	toolmeta.Register(s, newResolveSelectorTool(), handleResolveSelector(fbClient), "contract")
+
+	// Bitcoin
+	toolmeta.Register(s, newBTCFeeRateTool(), handleBTCFeeRate(tcClient), "fee", "bitcoin")
+	toolmeta.Register(s, newBuildBTCSendTool(), handleBuildBTCSend(store, bcClient), "send", "bitcoin")
+
+	// Litecoin
+	toolmeta.Register(s, newLTCFeeRateTool(), handleLTCFeeRate(tcClient), "fee", "litecoin")
+	toolmeta.Register(s, newBuildLTCSendTool(), handleBuildLTCSend(store, bcClient), "send", "litecoin")
+
+	// Dogecoin
+	toolmeta.Register(s, newDOGEFeeRateTool(), handleDOGEFeeRate(tcClient), "fee", "dogecoin")
+	toolmeta.Register(s, newBuildDOGESendTool(), handleBuildDOGESend(store, bcClient), "send", "dogecoin")
+
+	// Bitcoin Cash
+	toolmeta.Register(s, newBCHFeeRateTool(), handleBCHFeeRate(tcClient), "fee", "bitcoincash")
+	toolmeta.Register(s, newBuildBCHSendTool(), handleBuildBCHSend(store, bcClient), "send", "bitcoincash")
+
+	// Dash
+	toolmeta.Register(s, newDASHFeeRateTool(), handleDASHFeeRate(mcClient), "fee", "dash")
+	toolmeta.Register(s, newBuildDASHSendTool(), handleBuildDASHSend(store, bcClient), "send", "dash")
+
+	// Zcash
+	toolmeta.Register(s, newBuildZECSendTool(), handleBuildZECSend(store, bcClient), "send", "zcash")
+
+	// MayaChain
+	toolmeta.Register(s, newMayaFeeRateTool(), handleMayaFeeRate(mcClient), "fee", "mayachain")
+
+	// Solana
+	toolmeta.Register(s, newGetSOLBalanceTool(), handleGetSOLBalance(store, solClient), "balance", "solana")
+	toolmeta.Register(s, newGetSPLTokenBalanceTool(), handleGetSPLTokenBalance(store, solClient), "balance", "solana")
+	toolmeta.Register(s, newBuildSolanaTxTool(), handleBuildSolanaTx(store, solClient), "send", "solana")
+	toolmeta.Register(s, newBuildSPLTransferTxTool(), handleBuildSPLTransferTx(store, solClient), "send", "solana")
+	toolmeta.Register(s, newBuildSolanaSwapTool(), handleBuildSolanaSwap(store, jupClient), "swap", "solana")
+
+	// XRP
+	toolmeta.Register(s, newGetXRPBalanceTool(), handleGetXRPBalance(store, xrpClient), "balance", "xrp")
+	toolmeta.Register(s, newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient), "send", "xrp")
 
 	// Polymarket prediction market tools
 	pmtools.RegisterAll(s, store, pool)
