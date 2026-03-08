@@ -17,6 +17,7 @@ import (
 	"github.com/vultisig/mcp/internal/config"
 	"github.com/vultisig/mcp/internal/defillama"
 	evmclient "github.com/vultisig/mcp/internal/evm"
+	"github.com/vultisig/mcp/internal/fourbyte"
 	"github.com/vultisig/mcp/internal/jupiter"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/mayachain"
@@ -71,7 +72,10 @@ func main() {
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
 	mcClient := mayachain.NewClient(cfg.MayachainURL)
 	logger.Printf("mayachain: %s", cfg.MayachainURL)
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, dlClient); err != nil {
+
+	fbClient := fourbyte.NewClient()
+
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, fbClient, dlClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)

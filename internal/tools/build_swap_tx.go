@@ -14,7 +14,7 @@ import (
 
 func newBuildSwapTxTool() mcp.Tool {
 	return mcp.NewTool("build_swap_tx",
-		mcp.WithDescription("Build unsigned transaction(s) for a token swap. Supports THORChain, Mayachain, 1inch, LiFi, Jupiter, and Uniswap providers. Returns the swap transaction and an optional ERC20 approval transaction."),
+		mcp.WithDescription("Build unsigned transaction(s) for a token swap. Supports THORChain, Mayachain, 1inch, LiFi, Jupiter, and Uniswap providers. Returns the swap transaction and an optional ERC20 approval transaction. Load the 'swap-trading' skill for required pre-checks and confirmation flow."),
 		mcp.WithString("from_chain", mcp.Description("Source chain (e.g. \"Ethereum\", \"Bitcoin\", \"Solana\")"), mcp.Required()),
 		mcp.WithString("from_symbol", mcp.Description("Source token symbol (e.g. \"ETH\", \"USDC\")"), mcp.Required()),
 		mcp.WithString("from_address", mcp.Description("Source token contract address (empty for native coins)")),
