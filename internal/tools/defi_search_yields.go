@@ -51,7 +51,7 @@ func handleDefiSearchYields(dlClient *defillama.Client) server.ToolHandlerFunc {
 
 		pools, err := dlClient.GetYieldPools(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("defillama get yield pools: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("failed to fetch yield pools from DeFiLlama: %v", err)), nil
 		}
 
 		var filtered []defillama.Pool

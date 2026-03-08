@@ -28,13 +28,26 @@ type Protocol struct {
 	URL              string             `json:"url"`
 }
 
+// IsAggregateTVLKey returns true for keys in currentChainTvls that represent
+// aggregated sub-categories rather than actual chains.
+func IsAggregateTVLKey(name string) bool {
+	if strings.Contains(name, "-") {
+		return true
+	}
+	switch name {
+	case "borrowed", "staking", "pool2", "vesting":
+		return true
+	default:
+		return false
+	}
+}
+
 // TotalTVL computes the total TVL by summing currentChainTvls,
 // excluding borrowed/staking/pool2/vesting aggregations.
 func (p *Protocol) TotalTVL() float64 {
 	var total float64
 	for k, v := range p.CurrentChainTvls {
-		// Skip aggregated sub-categories
-		if strings.Contains(k, "-") {
+		if IsAggregateTVLKey(k) {
 			continue
 		}
 		total += v

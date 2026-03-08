@@ -31,14 +31,16 @@ func handleDefiChainTVL(dlClient *defillama.Client) server.ToolHandlerFunc {
 
 		chains, err := dlClient.GetChainsTVL(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("defillama get chains TVL: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("failed to fetch chain TVL from DeFiLlama: %v", err)), nil
 		}
 
-		// Sort by TVL descending
-		sort.Slice(chains, func(i, j int) bool { return chains[i].TVL > chains[j].TVL })
+		// Copy to avoid mutating cached slice
+		sorted := make([]defillama.ChainTVL, len(chains))
+		copy(sorted, chains)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].TVL > sorted[j].TVL })
 
 		if chainFilter != "" {
-			for _, c := range chains {
+			for _, c := range sorted {
 				if strings.EqualFold(c.Name, chainFilter) {
 					return mcp.NewToolResultText(fmt.Sprintf("%s TVL: %s", c.Name, formatMarketCap(c.TVL))), nil
 				}
@@ -48,14 +50,14 @@ func handleDefiChainTVL(dlClient *defillama.Client) server.ToolHandlerFunc {
 
 		// Return top 15
 		limit := 15
-		if len(chains) < limit {
-			limit = len(chains)
+		if len(sorted) < limit {
+			limit = len(sorted)
 		}
 
 		var sb strings.Builder
 		sb.WriteString("Top DeFi Chains by TVL:\n")
 		for i := 0; i < limit; i++ {
-			fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, chains[i].Name, formatMarketCap(chains[i].TVL))
+			fmt.Fprintf(&sb, "%d. %s: %s\n", i+1, sorted[i].Name, formatMarketCap(sorted[i].TVL))
 		}
 
 		return mcp.NewToolResultText(sb.String()), nil

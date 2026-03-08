@@ -37,7 +37,7 @@ func handleDefiGetProtocol(dlClient *defillama.Client) server.ToolHandlerFunc {
 
 		protocol, err := dlClient.GetProtocol(ctx, slug)
 		if err != nil {
-			return nil, fmt.Errorf("defillama get protocol: %w", err)
+			return mcp.NewToolResultError(fmt.Sprintf("failed to fetch protocol from DeFiLlama: %v", err)), nil
 		}
 		if protocol == nil {
 			return mcp.NewToolResultError(
@@ -66,8 +66,7 @@ func handleDefiGetProtocol(dlClient *defillama.Client) server.ToolHandlerFunc {
 			}
 			var chains []chainEntry
 			for name, tvl := range protocol.CurrentChainTvls {
-				// Skip aggregated keys like "borrowed", "staking", etc.
-				if strings.Contains(name, "-") || name == "borrowed" || name == "staking" || name == "pool2" || name == "vesting" {
+				if defillama.IsAggregateTVLKey(name) {
 					continue
 				}
 				chains = append(chains, chainEntry{name, tvl})
