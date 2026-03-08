@@ -1,5 +1,16 @@
 # Vultisig MCP Server
 
+## Security Tier
+
+STANDARD
+
+## Critical Boundaries
+
+- `internal/tools/` — Each tool is a file. Tool parameters define what agents can do.
+- `internal/protocols/` — DeFi protocol handlers. Incorrect ABI encoding = lost funds.
+- `internal/vault/store.go` — Per-session vault state. Thread-safety critical.
+- Skill files (`internal/skills/files/`) — Markdown docs that teach agents multi-step workflows.
+
 ## Build & Run
 
 ```bash
@@ -150,3 +161,16 @@ Logging is implemented via mcp-go `ToolHandlerMiddleware` (for tool call timing)
 - Replace directives in go.mod are required for `github.com/gogo/protobuf` and `github.com/agl/ed25519`.
 - EVM client pool (`internal/evm.Pool`) lazily creates per-chain clients on first use and caches them.
 - Default URLs belong in `config.go` (envconfig defaults), not in client constructors.
+- Doc comments on all exported functions, types, methods, and packages (`// FunctionName does ...`)
+
+## Knowledge Base
+
+For deeper context, see [vultisig-knowledge](https://github.com/vultisig/vultisig-knowledge). Read only when needed:
+
+| Situation | Read |
+|-----------|------|
+| First time in this repo | [repos/mcp.md](https://github.com/vultisig/vultisig-knowledge/blob/main/repos/mcp.md) |
+| Touching crypto/signing code | [architecture/mpc-tss-explained.md](https://github.com/vultisig/vultisig-knowledge/blob/main/architecture/mpc-tss-explained.md) |
+| Working with agent-backend | [repos/agent-backend.md](https://github.com/vultisig/vultisig-knowledge/blob/main/repos/agent-backend.md) |
+| Cross-repo gotchas | [coding/gotchas.md](https://github.com/vultisig/vultisig-knowledge/blob/main/coding/gotchas.md) |
+| Checking dependency versions | [coding/dependencies.md](https://github.com/vultisig/vultisig-knowledge/blob/main/coding/dependencies.md) |
