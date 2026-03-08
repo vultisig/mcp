@@ -17,6 +17,7 @@ import (
 
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/toolmeta"
 	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -39,12 +40,12 @@ func (p *Protocol) Register(s *server.MCPServer, store *vault.Store, ethClient *
 	deploy, _ := aavev3sdk.GetDeployment(chainID)
 	aaveClient := aavev3sdk.NewClient(ethClient, deploy)
 
-	s.AddTool(newDepositTool(), handleDeposit(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newWithdrawTool(), handleWithdraw(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newBorrowTool(), handleBorrow(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newRepayTool(), handleRepay(store, evmSDK, aaveClient, chainID))
-	s.AddTool(newGetBalancesTool(), handleGetBalances(store, aaveClient))
-	s.AddTool(newGetRatesTool(), handleGetRates(aaveClient))
+	toolmeta.Register(s, newDepositTool(), handleDeposit(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newWithdrawTool(), handleWithdraw(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newBorrowTool(), handleBorrow(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newRepayTool(), handleRepay(store, evmSDK, aaveClient, chainID), "aave")
+	toolmeta.Register(s, newGetBalancesTool(), handleGetBalances(store, aaveClient), "aave")
+	toolmeta.Register(s, newGetRatesTool(), handleGetRates(aaveClient), "aave")
 }
 
 func newDepositTool() mcp.Tool {
