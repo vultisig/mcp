@@ -37,6 +37,7 @@ type Config struct {
 	SolanaRPCURL  string `envconfig:"SOLANA_RPC_URL" default:"https://api.mainnet-beta.solana.com"`
 	JupiterAPIURL string `envconfig:"JUPITER_API_URL" default:"https://api.jup.ag"`
 	XrpRpcURL     string `envconfig:"XRP_RPC_URL" default:"https://s1.ripple.com:51234"`
+	TronRPCURL    string `envconfig:"TRON_RPC_URL" default:"https://api.trongrid.io"`
 	DefillamaURL  string `envconfig:"DEFILLAMA_URL" default:"https://api.llama.fi"`
 }
 
