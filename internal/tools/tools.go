@@ -9,6 +9,7 @@ import (
 
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
+	"github.com/vultisig/mcp/internal/defillama"
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/fourbyte"
 	"github.com/vultisig/mcp/internal/jupiter"
@@ -23,7 +24,7 @@ import (
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client, vcClient *verifier.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client, vcClient *verifier.Client, dlClient *defillama.Client) error {
 	// Utility tools (always-on)
 	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
 	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
@@ -84,6 +85,11 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	// XRP
 	toolmeta.Register(s, newGetXRPBalanceTool(), handleGetXRPBalance(store, xrpClient), "balance", "xrp")
 	toolmeta.Register(s, newBuildXRPSendTool(), handleBuildXRPSend(store, xrpClient), "send", "xrp")
+
+	// DeFi analytics (DeFiLlama)
+	toolmeta.Register(s, newDefiGetProtocolTool(), handleDefiGetProtocol(dlClient), "defi")
+	toolmeta.Register(s, newDefiSearchYieldsTool(), handleDefiSearchYields(dlClient), "defi")
+	toolmeta.Register(s, newDefiChainTVLTool(), handleDefiChainTVL(dlClient), "defi")
 
 	// Polymarket prediction market tools
 	pmtools.RegisterAll(s, store, pool)

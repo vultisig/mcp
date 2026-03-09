@@ -1,54 +1,21 @@
 package tools
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcutil/psbt"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/wire"
-
-	zcashsdk "github.com/vultisig/recipes/sdk/zcash"
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
-	"github.com/vultisig/mcp/internal/blockchair"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/thorchain"
+	"github.com/vultisig/mcp/internal/vault"
 )
 
-// buildPrevTxForChain creates a serialized wire.MsgTx with a P2PKH output paying to
-// senderAddr using the given chain's address encoder.
-func buildPrevTxForChain(t *testing.T, chainName, senderAddr string, outputValue int64) string {
-	t.Helper()
-	chain := utxoChains[chainName]
-	pkScript, err := chain.addressToPkScript(senderAddr)
-	if err != nil {
-		t.Fatalf("address to pkscript for %s: %v", chainName, err)
-	}
-
-	dummyHash, _ := chainhash.NewHashFromStr("0000000000000000000000000000000000000000000000000000000000000000")
-	msgTx := wire.NewMsgTx(chain.txVersion)
-	msgTx.AddTxIn(&wire.TxIn{
-		PreviousOutPoint: wire.OutPoint{Hash: *dummyHash, Index: 0},
-		Sequence:         wire.MaxTxInSequenceNum,
-	})
-	msgTx.AddTxOut(wire.NewTxOut(outputValue, pkScript))
-
-	var buf bytes.Buffer
-	err = msgTx.Serialize(&buf)
-	if err != nil {
-		t.Fatalf("serialize prev tx for %s: %v", chainName, err)
-	}
-	return hex.EncodeToString(buf.Bytes())
-}
-
-// mockThorchainMulti creates a mock THORChain server returning gas rates for multiple chains.
 func mockThorchainMulti(t *testing.T, gasRates map[string]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +26,13 @@ func mockThorchainMulti(t *testing.T, gasRates map[string]string) *httptest.Serv
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(addresses)
+		err := json.NewEncoder(w).Encode(addresses)
+		if err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 }
 
-// mockMayachainServer creates a mock MayaChain server returning gas rates for multiple chains.
 func mockMayachainServer(t *testing.T, gasRates map[string]string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,11 +43,13 @@ func mockMayachainServer(t *testing.T, gasRates map[string]string) *httptest.Ser
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(addresses)
+		err := json.NewEncoder(w).Encode(addresses)
+		if err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 }
 
-// deriveChainAddr derives the vault address for a given chain using the test keys.
 func deriveChainAddr(t *testing.T, chain common.Chain) string {
 	t.Helper()
 	addr, _, _, err := address.GetAddress(testECDSAPubKey, testChainCode, chain)
@@ -88,7 +59,15 @@ func deriveChainAddr(t *testing.T, chain common.Chain) string {
 	return addr
 }
 
-// Fee rate tests
+func setupVaultForChain(t *testing.T) *vault.Store {
+	t.Helper()
+	store := vault.NewStore()
+	store.Set("default", vault.Info{
+		ECDSAPublicKey: testECDSAPubKey,
+		ChainCode:      testChainCode,
+	})
+	return store
+}
 
 func TestLTCFeeRate(t *testing.T) {
 	srv := mockThorchainMulti(t, map[string]string{"LTC": "12"})
@@ -228,100 +207,14 @@ func TestMayaFeeRate(t *testing.T) {
 	}
 }
 
-// PSBT chain tests
-
 func TestBuildLTCSend_Basic(t *testing.T) {
-	store := setupBTCVault(t)
+	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Litecoin)
 
-	prevTxHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	prevTxHex := buildPrevTxForChain(t, "Litecoin", senderAddr, 200000)
+	handler := handleBuildLTCSend(store, nil)
 
-	utxos := []blockchair.UTXO{{TransactionHash: prevTxHash, Index: 0, Value: 200000, BlockID: 800000}}
-	rawTxs := map[string]string{prevTxHash: prevTxHex}
-
-	srv := mockBlockchairServer(t, utxos, rawTxs)
-	defer srv.Close()
-
-	handler := handleBuildLTCSend(store, blockchair.NewClient(srv.URL))
 	req := callToolReq("build_ltc_send", map[string]any{
 		"to_address": senderAddr,
-		"amount":     "50000",
-		"fee_rate":   float64(10),
-	})
-
-	res, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("expected success but got error: %s", resultText(t, res))
-	}
-
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Chain         string            `json:"chain"`
-			Action        string            `json:"action"`
-			SigningMode   string            `json:"signing_mode"`
-			UnsignedTxHex string            `json:"unsigned_tx_hex"`
-			TxDetails     map[string]string `json:"tx_details"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(txResult.Transactions) != 1 {
-		t.Fatalf("expected 1 tx, got %d", len(txResult.Transactions))
-	}
-
-	tx := txResult.Transactions[0]
-	if tx.Chain != "Litecoin" {
-		t.Errorf("chain: got %s, want Litecoin", tx.Chain)
-	}
-	if tx.Action != "transfer" {
-		t.Errorf("action: got %s, want transfer", tx.Action)
-	}
-	if tx.SigningMode != "ecdsa_secp256k1" {
-		t.Errorf("signing_mode: got %s, want ecdsa_secp256k1", tx.SigningMode)
-	}
-	if tx.TxDetails["tx_encoding"] != "psbt" {
-		t.Errorf("tx_encoding: got %s, want psbt", tx.TxDetails["tx_encoding"])
-	}
-	if tx.TxDetails["ticker"] != "LTC" {
-		t.Errorf("ticker: got %s, want LTC", tx.TxDetails["ticker"])
-	}
-	if tx.TxDetails["from"] != senderAddr {
-		t.Errorf("from: got %s, want %s", tx.TxDetails["from"], senderAddr)
-	}
-
-	psbtBytes, err := hex.DecodeString(tx.UnsignedTxHex)
-	if err != nil {
-		t.Fatalf("decode hex: %v", err)
-	}
-	pkt, err := psbt.NewFromRawBytes(bytes.NewReader(psbtBytes), false)
-	if err != nil {
-		t.Fatalf("parse PSBT: %v", err)
-	}
-	if pkt.UnsignedTx.TxOut[0].Value != 50000 {
-		t.Errorf("recipient value: got %d, want 50000", pkt.UnsignedTx.TxOut[0].Value)
-	}
-}
-
-func TestBuildLTCSend_InsufficientFunds(t *testing.T) {
-	store := setupBTCVault(t)
-
-	utxos := []blockchair.UTXO{{
-		TransactionHash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-		Index:           0, Value: 500, BlockID: 800000,
-	}}
-	srv := mockBlockchairServer(t, utxos, map[string]string{})
-	defer srv.Close()
-
-	handler := handleBuildLTCSend(store, blockchair.NewClient(srv.URL))
-	req := callToolReq("build_ltc_send", map[string]any{
-		"to_address": deriveChainAddr(t, common.Litecoin),
 		"amount":     "100000",
 		"fee_rate":   float64(10),
 	})
@@ -330,29 +223,40 @@ func TestBuildLTCSend_InsufficientFunds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !res.IsError {
-		t.Fatal("expected error for insufficient funds")
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if result["chain"] != "Litecoin" {
+		t.Errorf("expected chain Litecoin, got %v", result["chain"])
+	}
+	if result["from"] != senderAddr {
+		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
+	}
+	if result["action"] != "transfer" {
+		t.Errorf("expected action transfer, got %v", result["action"])
+	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
 	}
 }
 
 func TestBuildDOGESend_Basic(t *testing.T) {
-	store := setupBTCVault(t)
+	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Dogecoin)
 
-	prevTxHash := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	prevTxHex := buildPrevTxForChain(t, "Dogecoin", senderAddr, 5_000_000_000)
+	handler := handleBuildDOGESend(store, nil)
 
-	utxos := []blockchair.UTXO{{TransactionHash: prevTxHash, Index: 0, Value: 5_000_000_000, BlockID: 800000}}
-	rawTxs := map[string]string{prevTxHash: prevTxHex}
-
-	srv := mockBlockchairServer(t, utxos, rawTxs)
-	defer srv.Close()
-
-	handler := handleBuildDOGESend(store, blockchair.NewClient(srv.URL))
 	req := callToolReq("build_doge_send", map[string]any{
-		"to_address": senderAddr,
-		"amount":     "2000000000",
-		"fee_rate":   float64(1000),
+		"to_address": "DDogepartyxxxxxxxxxxxxxxxxxxw1dfzr",
+		"amount":     "100000000",
+		"fee_rate":   float64(500000),
 	})
 
 	res, err := handler(context.Background(), req)
@@ -360,50 +264,72 @@ func TestBuildDOGESend_Basic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if res.IsError {
-		t.Fatalf("expected success but got error: %s", resultText(t, res))
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
 
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Chain     string            `json:"chain"`
-			TxDetails map[string]string `json:"tx_details"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
 	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
+		t.Fatalf("unmarshal result: %v", err)
 	}
 
-	tx := txResult.Transactions[0]
-	if tx.Chain != "Dogecoin" {
-		t.Errorf("chain: got %s, want Dogecoin", tx.Chain)
+	if result["chain"] != "Dogecoin" {
+		t.Errorf("expected chain Dogecoin, got %v", result["chain"])
 	}
-	if tx.TxDetails["ticker"] != "DOGE" {
-		t.Errorf("ticker: got %s, want DOGE", tx.TxDetails["ticker"])
+	if result["from"] != senderAddr {
+		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
 	}
-	if tx.TxDetails["tx_encoding"] != "psbt" {
-		t.Errorf("tx_encoding: got %s, want psbt", tx.TxDetails["tx_encoding"])
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
 	}
 }
 
 func TestBuildBCHSend_Basic(t *testing.T) {
-	store := setupBTCVault(t)
+	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.BitcoinCash)
 
-	prevTxHash := "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-	prevTxHex := buildPrevTxForChain(t, "Bitcoin-Cash", senderAddr, 200000)
+	handler := handleBuildBCHSend(store, nil)
 
-	utxos := []blockchair.UTXO{{TransactionHash: prevTxHash, Index: 0, Value: 200000, BlockID: 800000}}
-	rawTxs := map[string]string{prevTxHash: prevTxHex}
-
-	srv := mockBlockchairServer(t, utxos, rawTxs)
-	defer srv.Close()
-
-	handler := handleBuildBCHSend(store, blockchair.NewClient(srv.URL))
 	req := callToolReq("build_bch_send", map[string]any{
-		"to_address": senderAddr,
+		"to_address": "bitcoincash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0rq9sywjpyy",
 		"amount":     "50000",
+		"fee_rate":   float64(3),
+	})
+
+	res, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+
+	if result["chain"] != "Bitcoin-Cash" {
+		t.Errorf("expected chain Bitcoin-Cash, got %v", result["chain"])
+	}
+	if result["from"] != senderAddr {
+		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
+	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
+	}
+}
+
+func TestBuildDASHSend_Basic(t *testing.T) {
+	store := setupVaultForChain(t)
+	senderAddr := deriveChainAddr(t, common.Dash)
+
+	handler := handleBuildDASHSend(store, nil)
+
+	req := callToolReq("build_dash_send", map[string]any{
+		"to_address": senderAddr,
+		"amount":     "100000000",
 		"fee_rate":   float64(5),
 	})
 
@@ -412,89 +338,32 @@ func TestBuildBCHSend_Basic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if res.IsError {
-		t.Fatalf("expected success but got error: %s", resultText(t, res))
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
 
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Chain     string            `json:"chain"`
-			TxDetails map[string]string `json:"tx_details"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
 	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
+		t.Fatalf("unmarshal result: %v", err)
 	}
-	if txResult.Transactions[0].Chain != "Bitcoin-Cash" {
-		t.Errorf("chain: got %s, want Bitcoin-Cash", txResult.Transactions[0].Chain)
+
+	if result["chain"] != "Dash" {
+		t.Errorf("expected chain Dash, got %v", result["chain"])
 	}
-	if txResult.Transactions[0].TxDetails["ticker"] != "BCH" {
-		t.Errorf("ticker: got %s, want BCH", txResult.Transactions[0].TxDetails["ticker"])
+	if result["from"] != senderAddr {
+		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
+	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
 	}
 }
-
-func TestBuildDASHSend_Basic(t *testing.T) {
-	store := setupBTCVault(t)
-	senderAddr := deriveChainAddr(t, common.Dash)
-
-	prevTxHash := "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-	prevTxHex := buildPrevTxForChain(t, "Dash", senderAddr, 500000)
-
-	utxos := []blockchair.UTXO{{TransactionHash: prevTxHash, Index: 0, Value: 500000, BlockID: 800000}}
-	rawTxs := map[string]string{prevTxHash: prevTxHex}
-
-	srv := mockBlockchairServer(t, utxos, rawTxs)
-	defer srv.Close()
-
-	handler := handleBuildDASHSend(store, blockchair.NewClient(srv.URL))
-	req := callToolReq("build_dash_send", map[string]any{
-		"to_address": senderAddr,
-		"amount":     "100000",
-		"fee_rate":   float64(10),
-	})
-
-	res, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if res.IsError {
-		t.Fatalf("expected success but got error: %s", resultText(t, res))
-	}
-
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Chain     string            `json:"chain"`
-			TxDetails map[string]string `json:"tx_details"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if txResult.Transactions[0].Chain != "Dash" {
-		t.Errorf("chain: got %s, want Dash", txResult.Transactions[0].Chain)
-	}
-	if txResult.Transactions[0].TxDetails["ticker"] != "DASH" {
-		t.Errorf("ticker: got %s, want DASH", txResult.Transactions[0].TxDetails["ticker"])
-	}
-}
-
-// ZEC tests
 
 func TestBuildZECSend_Basic(t *testing.T) {
-	store := setupBTCVault(t)
+	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Zcash)
 
-	utxos := []blockchair.UTXO{{
-		TransactionHash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-		Index:           0, Value: 500_000_000, BlockID: 800000,
-	}}
-	srv := mockBlockchairServer(t, utxos, map[string]string{})
-	defer srv.Close()
+	handler := handleBuildZECSend(store, nil)
 
-	handler := handleBuildZECSend(store, blockchair.NewClient(srv.URL))
 	req := callToolReq("build_zec_send", map[string]any{
 		"to_address": senderAddr,
 		"amount":     "100000000",
@@ -505,71 +374,42 @@ func TestBuildZECSend_Basic(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if res.IsError {
-		t.Fatalf("expected success but got error: %s", resultText(t, res))
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
 
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Chain         string            `json:"chain"`
-			Action        string            `json:"action"`
-			SigningMode   string            `json:"signing_mode"`
-			UnsignedTxHex string            `json:"unsigned_tx_hex"`
-			TxDetails     map[string]string `json:"tx_details"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
 	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(txResult.Transactions) != 1 {
-		t.Fatalf("expected 1 tx, got %d", len(txResult.Transactions))
+		t.Fatalf("unmarshal result: %v", err)
 	}
 
-	tx := txResult.Transactions[0]
-	if tx.Chain != "Zcash" {
-		t.Errorf("chain: got %s, want Zcash", tx.Chain)
+	if result["chain"] != "Zcash" {
+		t.Errorf("expected chain Zcash, got %v", result["chain"])
 	}
-	if tx.Action != "transfer" {
-		t.Errorf("action: got %s, want transfer", tx.Action)
+	if result["from"] != senderAddr {
+		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
 	}
-	if tx.SigningMode != "ecdsa_secp256k1" {
-		t.Errorf("signing_mode: got %s, want ecdsa_secp256k1", tx.SigningMode)
+	if result["action"] != "transfer" {
+		t.Errorf("expected action transfer, got %v", result["action"])
 	}
-	if tx.TxDetails["tx_encoding"] != "zcash_v4" {
-		t.Errorf("tx_encoding: got %s, want zcash_v4", tx.TxDetails["tx_encoding"])
+	if result["tx_encoding"] != "zcash_v4" {
+		t.Errorf("expected tx_encoding zcash_v4, got %v", result["tx_encoding"])
 	}
-	if tx.TxDetails["ticker"] != "ZEC" {
-		t.Errorf("ticker: got %s, want ZEC", tx.TxDetails["ticker"])
-	}
-	if tx.TxDetails["fee"] == "" || tx.TxDetails["fee"] == "0" {
-		t.Error("fee should be non-zero")
-	}
-	rawBytes, err := hex.DecodeString(tx.UnsignedTxHex)
-	if err != nil {
-		t.Fatalf("invalid hex: %v", err)
-	}
-	if len(rawBytes) == 0 {
-		t.Error("transaction bytes should not be empty")
+	if _, hasFeeRate := result["fee_rate"]; hasFeeRate {
+		t.Errorf("expected no fee_rate in ZEC result")
 	}
 }
 
 func TestBuildZECSend_WithMemo(t *testing.T) {
-	store := setupBTCVault(t)
-	senderAddr := deriveChainAddr(t, common.Zcash)
+	store := setupVaultForChain(t)
+	recipientAddr := deriveChainAddr(t, common.Zcash)
 
-	utxos := []blockchair.UTXO{{
-		TransactionHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		Index:           0, Value: 1_000_000_000, BlockID: 800000,
-	}}
-	srv := mockBlockchairServer(t, utxos, map[string]string{})
-	defer srv.Close()
+	handler := handleBuildZECSend(store, nil)
 
-	handler := handleBuildZECSend(store, blockchair.NewClient(srv.URL))
 	req := callToolReq("build_zec_send", map[string]any{
-		"to_address": senderAddr,
-		"amount":     "200000000",
-		"memo":       "=:DASH.DASH:XfakeAddress",
+		"to_address": recipientAddr,
+		"amount":     "100000000",
+		"memo":       "SWAP:ETH.ETH:0xabc",
 	})
 
 	res, err := handler(context.Background(), req)
@@ -577,72 +417,22 @@ func TestBuildZECSend_WithMemo(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if res.IsError {
-		t.Fatalf("expected success: %s", resultText(t, res))
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
 
-	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			Action string `json:"action"`
-		} `json:"transactions"`
-	}
-	err = json.Unmarshal([]byte(text), &txResult)
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcp.TextContent).Text), &result)
 	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if txResult.Transactions[0].Action != "swap" {
-		t.Errorf("action: got %s, want swap", txResult.Transactions[0].Action)
-	}
-}
-
-func TestBuildZECSend_InsufficientFunds(t *testing.T) {
-	store := setupBTCVault(t)
-
-	utxos := []blockchair.UTXO{{
-		TransactionHash: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-		Index:           0, Value: 1000, BlockID: 800000,
-	}}
-	srv := mockBlockchairServer(t, utxos, map[string]string{})
-	defer srv.Close()
-
-	handler := handleBuildZECSend(store, blockchair.NewClient(srv.URL))
-	req := callToolReq("build_zec_send", map[string]any{
-		"to_address": deriveChainAddr(t, common.Zcash),
-		"amount":     "100000000",
-	})
-
-	res, err := handler(context.Background(), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsError {
-		t.Fatal("expected error for insufficient funds")
-	}
-}
-
-func TestZecEstimateFee(t *testing.T) {
-	p2pkhScript := p2pkhScript(make([]byte, 20))
-
-	twoOutputs := []*zcashsdk.TxOutput{
-		{Value: 100000, Script: p2pkhScript},
-		{Value: 0, Script: p2pkhScript},
+		t.Fatalf("unmarshal result: %v", err)
 	}
 
-	// 1 input, 2 outputs → grace_actions=2 → fee = 5000 * 2 = 10000
-	fee := zecEstimateFee(1, twoOutputs)
-	if fee != 10000 {
-		t.Errorf("1 input 2 outputs: got %d, want 10000", fee)
+	if result["action"] != "swap" {
+		t.Errorf("expected action swap, got %v", result["action"])
 	}
-
-	// 3 inputs, 2 outputs → input_actions=3 > grace_actions=2 → fee = 5000 * 3 = 15000
-	fee = zecEstimateFee(3, twoOutputs)
-	if fee != 15000 {
-		t.Errorf("3 inputs 2 outputs: got %d, want 15000", fee)
+	if result["memo"] != "SWAP:ETH.ETH:0xabc" {
+		t.Errorf("unexpected memo: %v", result["memo"])
 	}
-
-	// 1 input, 2 outputs → still within grace, same as 1 input
-	fee = zecEstimateFee(2, twoOutputs)
-	if fee != 10000 {
-		t.Errorf("2 inputs 2 outputs: got %d, want 10000", fee)
+	if result["tx_encoding"] != "zcash_v4" {
+		t.Errorf("expected tx_encoding zcash_v4, got %v", result["tx_encoding"])
 	}
 }

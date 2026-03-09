@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -11,17 +11,14 @@ import (
 
 	"github.com/vultisig/mcp/internal/resolve"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func newBuildSolanaTxTool() mcp.Tool {
 	return mcp.NewTool("build_solana_tx",
 		mcp.WithDescription(
-			"Build an unsigned native SOL transfer transaction. "+
-				"Auto-fetches the recent blockhash. Checks destination account existence "+
-				"and validates rent exemption for new accounts. "+
-				"Returns a TransactionResult with signing_mode=eddsa_ed25519.",
+			"Return native SOL transfer arguments for the client to build and sign the transaction. "+
+				"The client is responsible for fetching a recent blockhash and assembling the transaction.",
 		),
 		mcp.WithString("from",
 			mcp.Description("Sender's Solana address (base58). Optional if vault info is set."),
@@ -59,7 +56,7 @@ func handleBuildSolanaTx(store *vault.Store, solClient *solanaclient.Client) ser
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %s", amountStr)), nil
 		}
 
-		fromPubkey, err := solanaclient.ParsePublicKey(fromAddr)
+		_, err = solanaclient.ParsePublicKey(fromAddr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 		}
@@ -69,29 +66,37 @@ func handleBuildSolanaTx(store *vault.Store, solClient *solanaclient.Client) ser
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %v", err)), nil
 		}
 
-		txBytes, err := solClient.BuildNativeTransfer(ctx, fromPubkey, toPubkey, amount.Uint64())
+		toExists, err := solClient.CheckAccountExists(ctx, toPubkey)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("build solana tx failed: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("check destination account: %v", err)), nil
+		}
+		if !toExists {
+			rentExempt, err := solClient.GetMinimumRentExemption(ctx)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("get rent exemption: %v", err)), nil
+			}
+			if amount.Uint64() < rentExempt {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"transfer amount %s lamports is below rent-exempt minimum %d lamports for new account",
+					amountStr, rentExempt,
+				)), nil
+			}
 		}
 
-		result := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         "Solana",
-					Action:        "transfer",
-					SigningMode:   types.SigningModeEdDSA,
-					UnsignedTxHex: hex.EncodeToString(txBytes),
-					TxDetails: map[string]string{
-						"from":   fromAddr,
-						"to":     toStr,
-						"amount": amountStr,
-						"ticker": "SOL",
-					},
-				},
-			},
+		result := map[string]any{
+			"chain":        "Solana",
+			"action":       "transfer",
+			"from":         fromAddr,
+			"to":           toStr,
+			"amount":       amountStr,
+			"ticker":       "SOL",
+			"signing_mode": "eddsa_ed25519",
 		}
 
-		return result.ToToolResult()
+		data, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("marshal result: %w", err)
+		}
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }

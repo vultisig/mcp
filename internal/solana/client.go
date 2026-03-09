@@ -60,11 +60,11 @@ func (c *Client) GetNativeBalance(ctx context.Context, account solana.PublicKey)
 }
 
 // GetTokenProgram queries the mint account to determine which token program owns it.
-// Returns zero pubkey and nil error for native SOL mint (So1111...1112) since
-// native SOL transfers don't use a token program.
+// Returns (TokenProgramID, 9, nil) for the native SOL mint (So1111...1112) since
+// wSOL is an SPL token with 9 decimals transferred between ATAs like any other token.
 func (c *Client) GetTokenProgram(ctx context.Context, mint solana.PublicKey) (solana.PublicKey, uint8, error) {
 	if mint == solana.SolMint {
-		return solana.PublicKey{}, 0, nil
+		return solana.TokenProgramID, 9, nil
 	}
 
 	accountInfo, err := c.rpc.GetAccountInfo(ctx, mint)
@@ -113,6 +113,14 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAccount solana.Public
 	}
 
 	return amount, nil
+}
+
+func (c *Client) GetMinimumRentExemption(ctx context.Context) (uint64, error) {
+	lamports, err := c.rpc.GetMinimumBalanceForRentExemption(ctx, 0, rpc.CommitmentFinalized)
+	if err != nil {
+		return 0, fmt.Errorf("get minimum rent exemption: %w", err)
+	}
+	return lamports, nil
 }
 
 func (c *Client) CheckAccountExists(ctx context.Context, account solana.PublicKey) (bool, error) {

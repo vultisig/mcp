@@ -2,27 +2,25 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/gagliardetto/solana-go"
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/resolve"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func newBuildSolanaSwapTool() mcp.Tool {
 	return mcp.NewTool("build_solana_swap",
 		mcp.WithDescription(
-			"Build an unsigned Solana swap transaction via Jupiter aggregator. "+
-				"Fetches a quote, gets swap instructions, and assembles a serialized "+
-				"Solana transaction ready for EdDSA signing. "+
-				"For native SOL as input, leave input_mint empty. "+
-				"Returns a TransactionResult with signing_mode=eddsa_ed25519.",
+			"Return Solana swap arguments via Jupiter aggregator for the client to build and sign the transaction. "+
+				"Fetches a quote and returns swap parameters including expected output and price impact. "+
+				"For native SOL as input, leave input_mint empty.",
 		),
 		mcp.WithString("from",
 			mcp.Description("Sender's Solana address (base58). Optional if vault info is set."),
@@ -67,42 +65,35 @@ func handleBuildSolanaSwap(store *vault.Store, jupClient *jupiter.Client) server
 		}
 
 		inputMint := req.GetString("input_mint", "")
+		if inputMint == "" {
+			inputMint = solana.SolMint.String()
+		}
+
 		slippageBps := int(req.GetFloat("slippage_bps", float64(jupiter.DefaultSlippageBps)))
 
-		result, err := jupClient.BuildSwapTransaction(ctx, fromAddr, inputMint, outputMint, amount, slippageBps)
+		quote, err := jupClient.GetQuote(ctx, inputMint, outputMint, amount, slippageBps)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("build solana swap failed: %v", err)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("get swap quote failed: %v", err)), nil
 		}
 
-		txDetails := map[string]string{
-			"from":        fromAddr,
-			"input_mint":  result.InputMint,
-			"output_mint": result.OutputMint,
-			"amount":      amountStr,
-		}
-		if result.OutAmount != nil {
-			txDetails["expected_output"] = result.OutAmount.String()
-		}
-		if result.MinimumOutput != nil {
-			txDetails["minimum_output"] = result.MinimumOutput.String()
-		}
-		if result.PriceImpact != "" {
-			txDetails["price_impact"] = result.PriceImpact
+		txArgs := map[string]any{
+			"chain":         "Solana",
+			"action":        "swap",
+			"from":          fromAddr,
+			"input_mint":    quote.InputMint,
+			"output_mint":   quote.OutputMint,
+			"amount":        amountStr,
+			"slippage_bps":  slippageBps,
+			"out_amount":    quote.OutAmount,
+			"min_output":    quote.OtherAmountThreshold,
+			"price_impact":  quote.PriceImpactPct,
+			"signing_mode":  "eddsa_ed25519",
 		}
 
-		txResult := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         "Solana",
-					Action:        "swap",
-					SigningMode:   types.SigningModeEdDSA,
-					UnsignedTxHex: hex.EncodeToString(result.TxBytes),
-					TxDetails:     txDetails,
-				},
-			},
+		data, err := json.Marshal(txArgs)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
 		}
-
-		return txResult.ToToolResult()
+		return mcp.NewToolResultText(string(data)), nil
 	}
 }

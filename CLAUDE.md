@@ -63,7 +63,7 @@ internal/tools/
   evm_check_allowance.go         # Query ERC-20 allowance for a spender
   evm_call.go                    # Execute eth_call read-only (any EVM chain)
   evm_tx_info.go                 # Get nonce/gas/fees for tx building
-  build_evm_tx.go                # Build unsigned EIP-1559 transaction
+  build_evm_tx.go                # Return EIP-1559 tx args for client to assemble and sign
   build_swap_tx.go               # Build swap transaction via recipes SDK
   search_token.go                # Token discovery via CoinGecko API
   abi_encode.go                  # ABI encode function calls / raw args
@@ -80,24 +80,24 @@ internal/jupiter/client.go       # Jupiter DEX aggregator API client
 internal/xrp/client.go           # XRP Ledger JSON-RPC client
 internal/tools/
   btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
-  build_btc_send.go              # Build unsigned BTC PSBT for send or swap
+  build_btc_send.go              # Return BTC send/swap args for client to build PSBT
   ltc_fee_rate.go                # LTC fee rate from THORChain
-  build_ltc_send.go              # Build unsigned LTC PSBT for send or swap
+  build_ltc_send.go              # Return LTC send/swap args for client to build PSBT
   doge_fee_rate.go               # DOGE fee rate from THORChain
-  build_doge_send.go             # Build unsigned DOGE PSBT for send or swap
+  build_doge_send.go             # Return DOGE send/swap args for client to build PSBT
   bch_fee_rate.go                # BCH fee rate from THORChain
-  build_bch_send.go              # Build unsigned BCH PSBT for send or swap
+  build_bch_send.go              # Return BCH send/swap args for client to build PSBT
   dash_fee_rate.go               # DASH fee rate from MayaChain
-  build_dash_send.go             # Build unsigned DASH PSBT for send or swap
-  build_zec_send.go              # Build unsigned Zcash v4 tx (automatic ZIP-317 fee)
+  build_dash_send.go             # Return DASH send/swap args for client to build PSBT
+  build_zec_send.go              # Return Zcash send/swap args (client builds Zcash v4 tx, ZIP-317 fee)
   maya_fee_rate.go               # Fee rate for any MayaChain-supported chain
   get_sol_balance.go             # Query native SOL balance
   get_spl_token_balance.go       # Query SPL token balance
-  build_solana_tx.go             # Build unsigned native SOL transfer
-  build_spl_transfer_tx.go       # Build unsigned SPL token transfer
-  build_solana_swap.go           # Build unsigned Solana swap via Jupiter
+  build_solana_tx.go             # Return SOL transfer args for client to build and sign
+  build_spl_transfer_tx.go       # Return SPL transfer args with derived ATA addresses
+  build_solana_swap.go           # Return Solana swap args via Jupiter (quote + params)
   get_xrp_balance.go             # Query native XRP balance
-  build_xrp_send.go              # Build unsigned XRP Payment for send or swap
+  build_xrp_send.go              # Return XRP Payment args (live fee/sequence fetched)
 ```
 
 ## Key Dependencies
@@ -105,11 +105,11 @@ internal/tools/
 - `github.com/mark3labs/mcp-go` — MCP server framework (stdio, tool registration)
 - `github.com/kelseyhightower/envconfig` — Struct-tag-based env config
 - `github.com/vultisig/vultisig-go` — Address derivation from vault keys
-- `github.com/vultisig/recipes` — SDK for EVM, BTC (UTXO builder, PSBT), Zcash v4, and swap operations
+- `github.com/vultisig/recipes` — SDK for swap operations and address derivation helpers
 - `github.com/ethereum/go-ethereum` — Ethereum JSON-RPC client
-- `github.com/btcsuite/btcd` — Bitcoin transaction primitives (wire, txscript, chainhash)
-- `github.com/gagliardetto/solana-go` — Solana RPC client and transaction building
-- `github.com/xyield/xrpl-go` — XRP Ledger binary codec for transaction encoding
+- `github.com/btcsuite/btcd` — Bitcoin/UTXO address validation (txscript, base58)
+- `github.com/gagliardetto/solana-go` — Solana RPC client and address/ATA utilities
+- `github.com/xyield/xrpl-go` — XRP Ledger address utilities
 
 ## EVM Chains
 
@@ -120,17 +120,19 @@ All chains use EIP-1559 (type 2) transactions. No legacy tx fallback.
 
 ## UTXO Chains
 
-| Chain | Tool prefix | Fee source | Tx format | Dust limit |
-|-------|-------------|------------|-----------|------------|
-| Bitcoin | `btc_*` | THORChain ("BTC") | PSBT | 546 |
-| Litecoin | `ltc_*` | THORChain ("LTC") | PSBT | 5460 |
-| Dogecoin | `doge_*` | THORChain ("DOGE") | PSBT | 100,000,000 |
-| Bitcoin-Cash | `bch_*` | THORChain ("BCH") | PSBT | 546 |
-| Dash | `dash_*` | MayaChain ("DASH") | PSBT | 546 |
-| Zcash | `build_zec_send` | automatic ZIP-317 | Zcash v4 + metadata | — |
+Build tools validate addresses and return args; the client is responsible for fetching UTXOs and building the transaction.
 
-Zcash transactions use `recipes/sdk/zcash` with `SerializeWithMetadata` to embed sig hashes for the verifier.
-No `fee_rate` param for ZEC — fee is computed automatically.
+| Chain | Tool prefix | Fee source | Client tx format |
+|-------|-------------|------------|-----------------|
+| Bitcoin | `btc_*` | THORChain ("BTC") | PSBT |
+| Litecoin | `ltc_*` | THORChain ("LTC") | PSBT |
+| Dogecoin | `doge_*` | THORChain ("DOGE") | PSBT |
+| Bitcoin-Cash | `bch_*` | THORChain ("BCH") | PSBT |
+| Dash | `dash_*` | MayaChain ("DASH") | PSBT |
+| Zcash | `build_zec_send` | ZIP-317 (client-side) | Zcash v4 |
+
+No `fee_rate` param for ZEC — ZIP-317 fee is computed by the client.
+All build tools return `tx_encoding` field (`"psbt"` or `"zcash_v4"`) indicating the expected client format.
 
 ## Logging
 
