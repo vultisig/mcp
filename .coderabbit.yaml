@@ -1,0 +1,40 @@
+# CodeRabbit configuration for Vultisig repos
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: en
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: true
+    base_branches:
+      - main
+      - master
+  path_instructions:
+    - path: "**/*.go"
+      instructions: |
+        Review Guidelines:
+        - Follow standard Go idioms (effective Go, go.dev/doc/modules/layout)
+        - Wrap errors with context: fmt.Errorf("doing X: %w", err)
+        - Context as first param, never in structs
+        - User-facing errors use mcp.NewToolResultError(), Go errors for protocol failures only
+    - path: "internal/tools/**"
+      instructions: |
+        MCP tool implementations. Each file is one tool.
+        - Verify ABI encoding correctness (encoding errors = lost funds)
+        - Check vault session context is properly retrieved
+        - Ensure tool parameters are validated
+  tools:
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 300000
+chat:
+  auto_reply: true
