@@ -49,6 +49,7 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 | `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
+| `GAIA_RPC_URL` | `https://cosmos-rest.publicnode.com` | Cosmos Hub (Gaia) REST endpoint |
 
 ## Architecture
 
@@ -85,6 +86,7 @@ internal/thorchain/client.go     # THORChain node client (fee rates via inbound_
 internal/solana/client.go        # Solana RPC client wrapper
 internal/jupiter/client.go       # Jupiter DEX aggregator API client
 internal/xrp/client.go           # XRP Ledger JSON-RPC client
+internal/gaia/client.go          # Cosmos Hub (Gaia) REST client
 internal/tools/
   btc_fee_rate.go                # Get BTC recommended fee rate from THORChain
   build_btc_send.go              # Return BTC send/swap args for client to build PSBT
@@ -105,6 +107,8 @@ internal/tools/
   build_solana_swap.go           # Return Solana swap args via Jupiter (quote + params)
   get_xrp_balance.go             # Query native XRP balance
   build_xrp_send.go              # Return XRP Payment args (live fee/sequence fetched)
+  get_atom_balance.go            # Query native ATOM balance on Cosmos Hub
+  build_gaia_send.go             # Return Cosmos ATOM transfer args (with optional memo for swaps)
 ```
 
 ## Key Dependencies

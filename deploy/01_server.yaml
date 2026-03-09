@@ -58,6 +58,11 @@ spec:
                 configMapKeyRef:
                   name: mcp-config
                   key: tron-rpc-url
+            - name: GAIA_RPC_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mcp-config
+                  key: gaia-rpc-url
           resources:
             requests:
               memory: "32Mi"

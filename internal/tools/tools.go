@@ -12,6 +12,7 @@ import (
 	"github.com/vultisig/mcp/internal/defillama"
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/fourbyte"
+	gaiaclient "github.com/vultisig/mcp/internal/gaia"
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
@@ -24,14 +25,13 @@ import (
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, tronClient *tronclient.Client, fbClient *fourbyte.Client, dlClient *defillama.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, tronClient *tronclient.Client, gaiaClient *gaiaclient.Client, fbClient *fourbyte.Client, dlClient *defillama.Client) error {
 	// Utility tools (always-on)
 	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
 	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
 	toolmeta.Register(s, newSearchTokenTool(), handleSearchToken(cgClient), "utility")
 	toolmeta.Register(s, newGetPriceTool(), handleGetPrice(cgClient), "utility")
-	toolmeta.Register(s, newGetTxStatusTool(), handleGetTxStatus(pool, bcClient, solClient, xrpClient, tronClient), "utility")
-
+	toolmeta.Register(s, newGetTxStatusTool(), handleGetTxStatus(pool, bcClient, solClient, xrpClient, tronClient, gaiaClient), "utility")
 	toolmeta.Register(s, newConvertAmountTool(), handleConvertAmount(), "utility")
 
 	// Swap
@@ -93,6 +93,10 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	toolmeta.Register(s, newGetTronAccountResourcesTool(), handleGetTronAccountResources(store, tronClient), "tron")
 	toolmeta.Register(s, newBuildTRXSendTool(), handleBuildTRXSend(store), "send", "tron")
 	toolmeta.Register(s, newBuildTRC20TransferTool(), handleBuildTRC20Transfer(store, tronClient), "send", "tron")
+
+	// Gaia (Cosmos Hub)
+	toolmeta.Register(s, newGetATOMBalanceTool(), handleGetATOMBalance(store, gaiaClient), "balance", "gaia")
+	toolmeta.Register(s, newBuildGaiaSendTool(), handleBuildGaiaSend(store, gaiaClient), "send", "gaia")
 
 	// DeFi analytics (DeFiLlama)
 	toolmeta.Register(s, newDefiGetProtocolTool(), handleDefiGetProtocol(dlClient), "defi")
