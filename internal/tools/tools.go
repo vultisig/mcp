@@ -91,7 +91,7 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	toolmeta.Register(s, newGetTRXBalanceTool(), handleGetTRXBalance(store, tronClient), "balance", "tron")
 	toolmeta.Register(s, newGetTRC20TokenBalanceTool(), handleGetTRC20TokenBalance(store, tronClient), "balance", "tron")
 	toolmeta.Register(s, newGetTronAccountResourcesTool(), handleGetTronAccountResources(store, tronClient), "tron")
-	toolmeta.Register(s, newBuildTRXSendTool(), handleBuildTRXSend(store, tronClient), "send", "tron")
+	toolmeta.Register(s, newBuildTRXSendTool(), handleBuildTRXSend(store), "send", "tron")
 	toolmeta.Register(s, newBuildTRC20TransferTool(), handleBuildTRC20Transfer(store, tronClient), "send", "tron")
 
 	// DeFi analytics (DeFiLlama)

@@ -36,7 +36,7 @@ func newBuildTRXSendTool() mcp.Tool {
 	)
 }
 
-func handleBuildTRXSend(store *vault.Store, tronClient *tron.Client) server.ToolHandlerFunc {
+func handleBuildTRXSend(store *vault.Store) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddr, err := req.RequireString("to")
 		if err != nil {

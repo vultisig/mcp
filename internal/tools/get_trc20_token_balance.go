@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -59,7 +60,10 @@ func handleGetTRC20TokenBalance(store *vault.Store, tronClient *tron.Client) ser
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("convert address to hex: %v", err)), nil
 		}
-		balanceParam := fmt.Sprintf("%064s", addrHex)
+		if len(addrHex) > tron.ABIWordHexLen {
+			return mcp.NewToolResultError(fmt.Sprintf("address hex too long: %d chars", len(addrHex))), nil
+		}
+		balanceParam := strings.Repeat("0", tron.ABIWordHexLen-len(addrHex)) + addrHex
 
 		balanceResult, err := tronClient.TriggerConstantContract(ctx, addr, contractAddr, "balanceOf(address)", balanceParam)
 		if err != nil {
@@ -80,12 +84,12 @@ func handleGetTRC20TokenBalance(store *vault.Store, tronClient *tron.Client) ser
 			return mcp.NewToolResultError(fmt.Sprintf("get TRC-20 decimals: %v", err)), nil
 		}
 
-		var decimals uint8
-		if len(decimalsResult.ConstantResult) > 0 {
-			decimals, err = tron.DecodeTRC20Decimals(decimalsResult.ConstantResult[0])
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("decode decimals: %v", err)), nil
-			}
+		if len(decimalsResult.ConstantResult) == 0 {
+			return mcp.NewToolResultError("no result from decimals() call"), nil
+		}
+		decimals, err := tron.DecodeTRC20Decimals(decimalsResult.ConstantResult[0])
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("decode decimals: %v", err)), nil
 		}
 
 		symbolResult, err := tronClient.TriggerConstantContract(ctx, addr, contractAddr, "symbol()", "")

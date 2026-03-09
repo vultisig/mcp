@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -98,7 +99,11 @@ func handleBuildTRC20Transfer(store *vault.Store, tronClient *tron.Client) serve
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("convert to address to hex: %v", err)), nil
 		}
-		parameter := fmt.Sprintf("%064s%064x", toHex, amount)
+		if len(toHex) > tron.ABIWordHexLen {
+			return mcp.NewToolResultError(fmt.Sprintf("address hex too long: %d chars", len(toHex))), nil
+		}
+		paddedAddr := strings.Repeat("0", tron.ABIWordHexLen-len(toHex)) + toHex
+		parameter := paddedAddr + fmt.Sprintf("%064x", amount)
 
 		symbol := "UNKNOWN"
 		var decimals uint8
@@ -116,6 +121,7 @@ func handleBuildTRC20Transfer(store *vault.Store, tronClient *tron.Client) serve
 			}
 		}
 
+		var decimalsWarning string
 		result, err = tronClient.TriggerConstantContract(ctx, fromAddr, contractAddr, "decimals()", "")
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("get token decimals: %v", err)), nil
@@ -124,9 +130,12 @@ func handleBuildTRC20Transfer(store *vault.Store, tronClient *tron.Client) serve
 			d, err := tron.DecodeTRC20Decimals(result.ConstantResult[0])
 			if err != nil {
 				log.Printf("[build_trc20_transfer] decode decimals for %s: %v", contractAddr, err)
+				decimalsWarning = "failed to decode decimals, amount_display may be incorrect"
 			} else {
 				decimals = d
 			}
+		} else {
+			decimalsWarning = "decimals unavailable, amount_display may be incorrect"
 		}
 
 		out := map[string]any{
@@ -143,6 +152,9 @@ func handleBuildTRC20Transfer(store *vault.Store, tronClient *tron.Client) serve
 			"fee_limit_sun":     feeLimit,
 			"function_selector": "transfer(address,uint256)",
 			"parameter":         parameter,
+		}
+		if decimalsWarning != "" {
+			out["decimals_warning"] = decimalsWarning
 		}
 
 		data, err := json.Marshal(out)

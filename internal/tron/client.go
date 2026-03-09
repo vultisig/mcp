@@ -15,6 +15,8 @@ import (
 	"github.com/btcsuite/btcd/btcutil/base58"
 )
 
+const ABIWordHexLen = 64
+
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
@@ -290,11 +292,15 @@ func DecodeTRC20Symbol(hexData string) (string, error) {
 	}
 	dataLen := uint64(len(data))
 	offset := new(big.Int).SetBytes(data[:32]).Uint64()
-	if offset > dataLen || offset+32 > dataLen {
+	if offset > dataLen {
+		return "", fmt.Errorf("invalid ABI string offset")
+	}
+	remaining := dataLen - offset
+	if remaining < 32 {
 		return "", fmt.Errorf("invalid ABI string offset")
 	}
 	length := new(big.Int).SetBytes(data[offset : offset+32]).Uint64()
-	if length > dataLen || offset+32+length > dataLen {
+	if length > remaining-32 {
 		return "", fmt.Errorf("invalid ABI string length")
 	}
 	return string(data[offset+32 : offset+32+length]), nil
