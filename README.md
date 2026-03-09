@@ -497,20 +497,17 @@ Validate a plugin configuration and get the resulting policy rules. Call after `
 
 #### `check_plugin_installed`
 
-Check whether a plugin is installed for a vault.
+Check whether a plugin is installed for the current session's vault. Requires `set_vault_info` first. Requires `VERIFIER_API_KEY` to be configured.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `plugin_id` | Yes | Plugin identifier to check |
-| `public_key` | Yes | Vault ECDSA public key (hex) identifying the user |
 
 #### `check_billing_status`
 
-Check whether a vault's billing is active (free trial or billing plugin installed).
+Check whether the current session's vault has active billing (free trial or billing plugin installed). Requires `set_vault_info` first. Requires `VERIFIER_API_KEY` to be configured.
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `public_key` | Yes | Vault ECDSA public key (hex) identifying the user |
+No parameters.
 
 ---
 

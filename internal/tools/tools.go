@@ -98,8 +98,11 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 	if vcClient != nil {
 		toolmeta.Register(s, newGetRecipeSchemaTool(), handleGetRecipeSchema(vcClient), "plugin")
 		toolmeta.Register(s, newSuggestPolicyTool(), handleSuggestPolicy(vcClient), "plugin")
-		toolmeta.Register(s, newCheckPluginInstalledTool(), handleCheckPluginInstalled(vcClient), "plugin")
-		toolmeta.Register(s, newCheckBillingStatusTool(), handleCheckBillingStatus(vcClient), "plugin")
+		// Vault-scoped tools additionally require the service API key (X-Service-Key).
+		if vcClient.HasAPIKey() {
+			toolmeta.Register(s, newCheckPluginInstalledTool(), handleCheckPluginInstalled(store, vcClient), "plugin")
+			toolmeta.Register(s, newCheckBillingStatusTool(), handleCheckBillingStatus(store, vcClient), "plugin")
+		}
 	}
 
 	err := protocols.RegisterAll(s, store, pool)
