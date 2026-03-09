@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -85,12 +86,24 @@ func handleBuildBCHSend(store *vault.Store, _ *blockchair.Client) server.ToolHan
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Bitcoin Cash address: %v", err)), nil
 		}
-		if explicitAddr != "" && explicitAddr != senderAddr {
-			return mcp.NewToolResultError(fmt.Sprintf(
-				"address %q does not match vault-derived address %q", explicitAddr, senderAddr)), nil
-		}
 
 		bchChain := utxoChains["Bitcoin-Cash"]
+
+		if explicitAddr != "" {
+			explicitScript, err := bchChain.addressToPkScript(explicitAddr)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid address: %v", err)), nil
+			}
+			senderScript, err := bchChain.addressToPkScript(senderAddr)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("derive sender script: %v", err)), nil
+			}
+			if !bytes.Equal(explicitScript, senderScript) {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"address %q does not match vault-derived address", explicitAddr)), nil
+			}
+		}
+
 		_, err = bchChain.addressToPkScript(toAddress)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to_address: %v", err)), nil

@@ -61,12 +61,27 @@ func handleBuildSolanaTx(store *vault.Store, solClient *solanaclient.Client) ser
 			return mcp.NewToolResultError(fmt.Sprintf("invalid from address: %v", err)), nil
 		}
 
-		_, err = solanaclient.ParsePublicKey(toStr)
+		toPubkey, err := solanaclient.ParsePublicKey(toStr)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to address: %v", err)), nil
 		}
 
-		_ = solClient
+		toExists, err := solClient.CheckAccountExists(ctx, toPubkey)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("check destination account: %v", err)), nil
+		}
+		if !toExists {
+			rentExempt, err := solClient.GetMinimumRentExemption(ctx)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("get rent exemption: %v", err)), nil
+			}
+			if amount.Uint64() < rentExempt {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"transfer amount %s lamports is below rent-exempt minimum %d lamports for new account",
+					amountStr, rentExempt,
+				)), nil
+			}
+		}
 
 		result := map[string]any{
 			"chain":        "Solana",

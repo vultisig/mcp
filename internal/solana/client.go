@@ -115,6 +115,14 @@ func (c *Client) GetTokenBalance(ctx context.Context, tokenAccount solana.Public
 	return amount, nil
 }
 
+func (c *Client) GetMinimumRentExemption(ctx context.Context) (uint64, error) {
+	lamports, err := c.rpc.GetMinimumBalanceForRentExemption(ctx, 0, rpc.CommitmentFinalized)
+	if err != nil {
+		return 0, fmt.Errorf("get minimum rent exemption: %w", err)
+	}
+	return lamports, nil
+}
+
 func (c *Client) CheckAccountExists(ctx context.Context, account solana.PublicKey) (bool, error) {
 	accountInfo, err := c.rpc.GetAccountInfo(ctx, account)
 	if err != nil {

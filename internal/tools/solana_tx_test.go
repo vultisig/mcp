@@ -116,6 +116,42 @@ func TestBuildSolanaTx_MissingParams(t *testing.T) {
 	}
 }
 
+func newMockSolanaRPC(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Method string `json:"method"`
+			ID     any    `json:"id"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		w.Header().Set("Content-Type", "application/json")
+		switch req.Method {
+		case "getAccountInfo":
+			json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req.ID,
+				"result": map[string]any{
+					"context": map[string]any{"slot": 1},
+					"value": map[string]any{
+						"data":       []string{"", "base64"},
+						"executable": false,
+						"lamports":   1000000,
+						"owner":      "11111111111111111111111111111111",
+						"rentEpoch":  0,
+					},
+				},
+			})
+		default:
+			json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      req.ID,
+				"result":  nil,
+			})
+		}
+	}))
+}
+
 func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 	store := vault.NewStore()
 	store.Set("default", vault.Info{
@@ -124,7 +160,9 @@ func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 		ChainCode:      testChainCode,
 	})
 
-	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
+	srv := newMockSolanaRPC(t)
+	defer srv.Close()
+	handler := handleBuildSolanaTx(store, solanaclient.NewClient(rpc.New(srv.URL)))
 	ctx := context.Background()
 
 	req := callToolReq("build_solana_tx", map[string]any{
