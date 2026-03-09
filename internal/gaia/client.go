@@ -138,12 +138,19 @@ func (c *Client) GetTransactionStatus(ctx context.Context, txHash string) (*TxSt
 }
 
 func ValidateAddress(address string) error {
-	hrp, _, err := bech32.Decode(address)
+	hrp, data, err := bech32.Decode(address)
 	if err != nil {
 		return fmt.Errorf("invalid bech32 address: %w", err)
 	}
 	if hrp != "cosmos" {
 		return fmt.Errorf("expected bech32 prefix \"cosmos\", got %q", hrp)
+	}
+	conv, err := bech32.ConvertBits(data, 5, 8, false)
+	if err != nil {
+		return fmt.Errorf("invalid address data: %w", err)
+	}
+	if len(conv) != 20 {
+		return fmt.Errorf("invalid address length: got %d bytes, want 20", len(conv))
 	}
 	return nil
 }

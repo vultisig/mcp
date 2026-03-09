@@ -217,6 +217,11 @@ func TestValidateAddress(t *testing.T) {
 			address: "0x742d35Cc6634C0532925a3b844Bc9e7595f2bD45",
 			wantErr: true,
 		},
+		{
+			name:    "wrong data length (10 bytes)",
+			address: "cosmos1qypqxpq9qcrsszg2789qmz",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
