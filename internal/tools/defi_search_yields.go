@@ -45,8 +45,11 @@ func handleDefiSearchYields(dlClient *defillama.Client) server.ToolHandlerFunc {
 		protocol := strings.ToLower(strings.TrimSpace(req.GetString("protocol", "")))
 		minTVL := req.GetFloat("min_tvl", 100000)
 		limit := int(req.GetFloat("limit", 10))
-		if limit <= 0 || limit > 25 {
+		switch {
+		case limit <= 0:
 			limit = 10
+		case limit > 25:
+			limit = 25
 		}
 
 		pools, err := dlClient.GetYieldPools(ctx)
