@@ -62,11 +62,11 @@ func TestGetTokenProgram_NativeMint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if pubkey != (solana.PublicKey{}) {
-		t.Errorf("expected zero pubkey, got %s", pubkey)
+	if pubkey != solana.TokenProgramID {
+		t.Errorf("expected TokenProgramID, got %s", pubkey)
 	}
-	if decimals != 0 {
-		t.Errorf("expected 0 decimals, got %d", decimals)
+	if decimals != 9 {
+		t.Errorf("expected 9 decimals, got %d", decimals)
 	}
 }
 

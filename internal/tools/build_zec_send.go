@@ -2,32 +2,26 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
-	"math"
-	"sort"
 	"strconv"
 
-	"github.com/btcsuite/btcd/txscript"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
-	zcashsdk "github.com/vultisig/recipes/sdk/zcash"
-
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/resolve"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
 func newBuildZECSendTool() mcp.Tool {
 	return mcp.NewTool("build_zec_send",
 		mcp.WithDescription(
-			"Build an unsigned Zcash v4 transaction for a send or swap. "+
-				"Automatically selects UTXOs and calculates the fee using ZIP-317 (no fee_rate param needed). "+
-				"For MayaChain swaps, provide the memo parameter to include an OP_RETURN output. "+
+			"Return Zcash transaction arguments for a send or swap. "+
+				"Validates addresses and returns parameters for the client to build the transaction. "+
+				"Fee is computed automatically using ZIP-317 on the client side. "+
 				"Requires set_vault_info to be called first.",
 		),
 		mcp.WithString("to_address",
@@ -47,7 +41,7 @@ func newBuildZECSendTool() mcp.Tool {
 	)
 }
 
-func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.ToolHandlerFunc {
+func handleBuildZECSend(store *vault.Store, _ *blockchair.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {
@@ -58,16 +52,13 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 		if err != nil {
 			return mcp.NewToolResultError("missing amount"), nil
 		}
-		amount, err := strconv.ParseUint(amountStr, 10, 64)
-		if err != nil || amount == 0 {
+		amount, parseErr := strconv.ParseInt(amountStr, 10, 64)
+		if parseErr != nil || amount <= 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid amount: %q", amountStr)), nil
-		}
-		if amount > math.MaxInt64 {
-			return mcp.NewToolResultError(fmt.Sprintf("amount %d exceeds maximum allowed value", amount)), nil
 		}
 
 		memo := req.GetString("memo", "")
-		if len(memo) > 80 {
+		if memo != "" && len(memo) > 80 {
 			return mcp.NewToolResultError(fmt.Sprintf("memo too long: %d bytes (max 80)", len(memo))), nil
 		}
 
@@ -79,7 +70,7 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
 		}
 
-		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Zcash)
+		senderAddr, _, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Zcash)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Zcash address: %v", err)), nil
 		}
@@ -88,166 +79,32 @@ func handleBuildZECSend(store *vault.Store, bcClient *blockchair.Client) server.
 				"address %q does not match vault-derived address %q", explicitAddr, senderAddr)), nil
 		}
 
-		pubKeyBytes, err := hex.DecodeString(derivedPubKey)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("decode derived pubkey: %v", err)), nil
-		}
-
-		dashboard, err := bcClient.GetAddressDashboard(ctx, "Zcash", senderAddr)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("fetch UTXOs: %v", err)), nil
-		}
-
-		fromScript, err := zcashAddrToPkScript(senderAddr)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("invalid sender address: %v", err)), nil
-		}
-
-		toScript, err := zcashAddrToPkScript(toAddress)
+		zcashChain := utxoChains["Zcash"]
+		_, err = zcashChain.addressToPkScript(toAddress)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid to_address: %v", err)), nil
 		}
-
-		changeScript, err := zcashAddrToPkScript(senderAddr)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("create change script: %v", err)), nil
-		}
-
-		outputs := []*zcashsdk.TxOutput{
-			{Value: int64(amount), Script: toScript},
-			{Value: 0, Script: changeScript},
-		}
-		changeIdx := 1
-
-		if memo != "" {
-			memoScript, err := txscript.NullDataScript([]byte(memo))
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("create OP_RETURN script: %v", err)), nil
-			}
-			outputs = append(outputs, &zcashsdk.TxOutput{Value: 0, Script: memoScript})
-		}
-
-		availableUTXOs := make([]blockchair.UTXO, 0, len(dashboard.UTXOs))
-		for _, u := range dashboard.UTXOs {
-			if u.Value > 0 && u.Index >= 0 {
-				availableUTXOs = append(availableUTXOs, u)
-			}
-		}
-		sort.Slice(availableUTXOs, func(i, j int) bool {
-			return availableUTXOs[i].Value > availableUTXOs[j].Value
-		})
-
-		var inputs []zcashsdk.TxInput
-		var totalInput uint64
-
-		for _, u := range availableUTXOs {
-			inputs = append(inputs, zcashsdk.TxInput{
-				TxHash:   u.TransactionHash,
-				Index:    uint32(u.Index),
-				Value:    uint64(u.Value),
-				Script:   fromScript,
-				Sequence: 0xffffffff,
-			})
-			totalInput += uint64(u.Value)
-
-			fee := zecEstimateFee(len(inputs), outputs)
-			if totalInput >= amount+fee {
-				change := totalInput - amount - fee
-				if change > math.MaxInt64 {
-					return mcp.NewToolResultError("change amount overflow"), nil
-				}
-				outputs[changeIdx].Value = int64(change)
-				break
-			}
-		}
-
-		neededFee := zecEstimateFee(len(inputs), outputs)
-		if totalInput < amount+neededFee {
-			return mcp.NewToolResultError(
-				fmt.Sprintf("insufficient funds: have %d zatoshis, need %d (amount %d + fee %d)", totalInput, amount+neededFee, amount, neededFee),
-			), nil
-		}
-
-		fee := zecEstimateFee(len(inputs), outputs)
-
-		zecSDK := zcashsdk.NewSDK(nil)
-		rawBytes, err := zecSDK.SerializeUnsignedTx(inputs, outputs)
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("serialize Zcash tx: %v", err)), nil
-		}
-
-		sigHashes := make([][]byte, len(inputs))
-		for i := range inputs {
-			sigHash, err := zecSDK.CalculateSigHash(inputs, outputs, i)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("calculate sig hash for input %d: %v", i, err)), nil
-			}
-			sigHashes[i] = sigHash
-		}
-
-		finalBytes := zcashsdk.SerializeWithMetadata(rawBytes, sigHashes, pubKeyBytes)
 
 		action := "transfer"
 		if memo != "" {
 			action = "swap"
 		}
 
-		txResult := &types.TransactionResult{
-			Transactions: []types.Transaction{
-				{
-					Sequence:      1,
-					Chain:         "Zcash",
-					Action:        action,
-					SigningMode:   types.SigningModeECDSA,
-					UnsignedTxHex: hex.EncodeToString(finalBytes),
-					TxDetails: map[string]string{
-						"ticker":      "ZEC",
-						"from":        senderAddr,
-						"to":          toAddress,
-						"amount":      amountStr,
-						"fee":         strconv.FormatUint(fee, 10),
-						"change":      strconv.FormatInt(outputs[changeIdx].Value, 10),
-						"input_count": strconv.Itoa(len(inputs)),
-						"tx_encoding": types.TxEncodingZcashV4,
-					},
-				},
-			},
+		result := map[string]any{
+			"chain":       "Zcash",
+			"action":      action,
+			"from":        senderAddr,
+			"to":          toAddress,
+			"amount":      amount,
+			"memo":        memo,
+			"fee_note":    "fee computed automatically via ZIP-317 by the client",
+			"tx_encoding": "zcash_v4",
 		}
 
-		return txResult.ToToolResult()
+		data, err := json.Marshal(result)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+		}
+		return mcp.NewToolResultText(string(data)), nil
 	}
-}
-
-// zecEstimateFee estimates the Zcash transaction fee using ZIP-317 logical actions.
-// ZIP-317: conventional_fee = marginal_fee × max(grace_actions, logical_actions)
-// where marginal_fee = 5000 zatoshis, grace_actions = 2.
-// See: https://zips.z.cash/zip-0317
-func zecEstimateFee(numInputs int, outputs []*zcashsdk.TxOutput) uint64 {
-	const (
-		marginalFee     = 5000
-		graceActions    = 2
-		p2pkhInputSize  = 150
-		p2pkhOutputSize = 34
-	)
-
-	totalOutputSize := 0
-	for _, out := range outputs {
-		totalOutputSize += 8 + 1 + len(out.Script)
-	}
-
-	totalInputSize := numInputs * p2pkhInputSize
-	inputActions := (totalInputSize + p2pkhInputSize - 1) / p2pkhInputSize
-	outputActions := (totalOutputSize + p2pkhOutputSize - 1) / p2pkhOutputSize
-
-	logicalActions := inputActions
-	if outputActions > logicalActions {
-		logicalActions = outputActions
-	}
-
-	actions := graceActions
-	if logicalActions > actions {
-		actions = logicalActions
-	}
-
-	return uint64(marginalFee * actions)
 }

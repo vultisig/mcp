@@ -52,19 +52,14 @@ func TestBuildEVMTx_ChainParam(t *testing.T) {
 
 			text := resultText(t, res)
 
-			var txResult struct {
-				Transactions []struct {
-					ChainID string `json:"chain_id"`
-				} `json:"transactions"`
+			var result struct {
+				ChainID string `json:"chain_id"`
 			}
-			if err := json.Unmarshal([]byte(text), &txResult); err != nil {
+			if err := json.Unmarshal([]byte(text), &result); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if len(txResult.Transactions) != 1 {
-				t.Fatalf("expected 1 transaction, got %d", len(txResult.Transactions))
-			}
-			if txResult.Transactions[0].ChainID != tt.wantChainID {
-				t.Errorf("chain_id: got %q, want %q", txResult.Transactions[0].ChainID, tt.wantChainID)
+			if result.ChainID != tt.wantChainID {
+				t.Errorf("chain_id: got %q, want %q", result.ChainID, tt.wantChainID)
 			}
 		})
 	}
@@ -96,19 +91,14 @@ func TestBuildEVMTx_ChainIDOverride(t *testing.T) {
 
 	text := resultText(t, res)
 
-	var txResult struct {
-		Transactions []struct {
-			ChainID string `json:"chain_id"`
-		} `json:"transactions"`
+	var result struct {
+		ChainID string `json:"chain_id"`
 	}
-	if err := json.Unmarshal([]byte(text), &txResult); err != nil {
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(txResult.Transactions) != 1 {
-		t.Fatalf("expected 1 transaction, got %d", len(txResult.Transactions))
-	}
-	if txResult.Transactions[0].ChainID != "999" {
-		t.Errorf("chain_id: got %q, want %q", txResult.Transactions[0].ChainID, "999")
+	if result.ChainID != "999" {
+		t.Errorf("chain_id: got %q, want %q", result.ChainID, "999")
 	}
 }
 
@@ -136,19 +126,14 @@ func TestBuildEVMTx_DefaultChainIsEthereum(t *testing.T) {
 
 	text := resultText(t, res)
 
-	var txResult struct {
-		Transactions []struct {
-			ChainID string `json:"chain_id"`
-		} `json:"transactions"`
+	var result struct {
+		ChainID string `json:"chain_id"`
 	}
-	if err := json.Unmarshal([]byte(text), &txResult); err != nil {
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(txResult.Transactions) != 1 {
-		t.Fatalf("expected 1 transaction, got %d", len(txResult.Transactions))
-	}
-	if txResult.Transactions[0].ChainID != "1" {
-		t.Errorf("chain_id: got %q, want %q", txResult.Transactions[0].ChainID, "1")
+	if result.ChainID != "1" {
+		t.Errorf("chain_id: got %q, want %q", result.ChainID, "1")
 	}
 }
 
