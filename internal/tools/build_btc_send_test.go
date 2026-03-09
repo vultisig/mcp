@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -41,19 +42,17 @@ func deriveBTCAddress(t *testing.T, store *vault.Store) string {
 func mockThorchainServer(t *testing.T, feeRate uint64) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := map[string]any{
-			"current_chain_heights": map[string]any{},
-			"chains": []map[string]any{
-				{
-					"chain":    "BTC",
-					"gas_rate": feeRate,
-					"halted":   false,
-					"outbound": false,
-				},
+		addresses := []map[string]any{
+			{
+				"chain":          "BTC",
+				"address":        "fakefake",
+				"gas_rate":       strconv.FormatUint(feeRate, 10),
+				"gas_rate_units": "satsperbyte",
+				"halted":         false,
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(addresses)
 		if err != nil {
 			t.Errorf("encode response: %v", err)
 		}

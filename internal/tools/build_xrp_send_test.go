@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -38,11 +39,11 @@ func mockXRPServer(t *testing.T, sequence uint32, ledger uint32, fee uint64) *ht
 					},
 				},
 			})
-		case "ledger_current":
+		case "ledger":
 			json.NewEncoder(w).Encode(map[string]any{
 				"result": map[string]any{
-					"status":                 "success",
-					"ledger_current_index":   ledger,
+					"status":       "success",
+					"ledger_index": ledger,
 				},
 			})
 		case "fee":
@@ -50,7 +51,7 @@ func mockXRPServer(t *testing.T, sequence uint32, ledger uint32, fee uint64) *ht
 				"result": map[string]any{
 					"status": "success",
 					"drops": map[string]any{
-						"base_fee": fee,
+						"base_fee": strconv.FormatUint(fee, 10),
 					},
 				},
 			})

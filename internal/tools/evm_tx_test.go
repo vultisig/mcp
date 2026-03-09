@@ -2,14 +2,10 @@ package tools
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"testing"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/mark3labs/mcp-go/mcp"
-
-	reth "github.com/vultisig/recipes/chain/evm/ethereum"
 
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -215,9 +211,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 		gasLimit           string
 		maxFeePerGas       string
 		maxPriorityFee     string
-		wantNonce          uint64
-		wantGas            uint64
 		wantTo             string
+		wantNonce          string
+		wantGas            string
 		wantMaxFee         string
 		wantMaxPriorityFee string
 	}{
@@ -230,9 +226,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			gasLimit:           "28767",
 			maxFeePerGas:       "134966309",
 			maxPriorityFee:     "423",
-			wantNonce:          7,
-			wantGas:            28767,
 			wantTo:             "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+			wantNonce:          "7",
+			wantGas:            "28767",
 			wantMaxFee:         "134966309",
 			wantMaxPriorityFee: "423",
 		},
@@ -245,9 +241,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			gasLimit:           "48936",
 			maxFeePerGas:       "137582443",
 			maxPriorityFee:     "423",
-			wantNonce:          8,
-			wantGas:            48936,
 			wantTo:             "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+			wantNonce:          "8",
+			wantGas:            "48936",
 			wantMaxFee:         "137582443",
 			wantMaxPriorityFee: "423",
 		},
@@ -260,9 +256,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			gasLimit:           "150000",
 			maxFeePerGas:       "137582443",
 			maxPriorityFee:     "423",
-			wantNonce:          9,
-			wantGas:            150000,
 			wantTo:             "0xe2e7a17dFf93280dec073C995595155283e3C372",
+			wantNonce:          "9",
+			wantGas:            "150000",
 			wantMaxFee:         "137582443",
 			wantMaxPriorityFee: "423",
 		},
@@ -275,9 +271,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			gasLimit:           "105313",
 			maxFeePerGas:       "82751424",
 			maxPriorityFee:     "15750",
-			wantNonce:          12,
-			wantGas:            105313,
 			wantTo:             "0xe2e7a17dFf93280dec073C995595155283e3C372",
+			wantNonce:          "12",
+			wantGas:            "105313",
 			wantMaxFee:         "82751424",
 			wantMaxPriorityFee: "15750",
 		},
@@ -290,9 +286,9 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			gasLimit:           "104414",
 			maxFeePerGas:       "133342876",
 			maxPriorityFee:     "15750",
-			wantNonce:          13,
-			wantGas:            104414,
 			wantTo:             "0xe2e7a17dFf93280dec073C995595155283e3C372",
+			wantNonce:          "13",
+			wantGas:            "104414",
 			wantMaxFee:         "133342876",
 			wantMaxPriorityFee: "15750",
 		},
@@ -317,79 +313,43 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 
 			text := resultText(t, res)
 
-			var txResult struct {
-				Transactions []struct {
-					Sequence      int               `json:"sequence"`
-					Chain         string            `json:"chain"`
-					ChainID       string            `json:"chain_id"`
-					SigningMode   string            `json:"signing_mode"`
-					UnsignedTxHex string            `json:"unsigned_tx_hex"`
-					TxDetails     map[string]string `json:"tx_details"`
-				} `json:"transactions"`
+			var result struct {
+				ChainID              string `json:"chain_id"`
+				To                   string `json:"to"`
+				Nonce                string `json:"nonce"`
+				GasLimit             string `json:"gas_limit"`
+				MaxFeePerGas         string `json:"max_fee_per_gas"`
+				MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas"`
+				Data                 string `json:"data"`
+				TxType               int    `json:"tx_type"`
 			}
-			if err := json.Unmarshal([]byte(text), &txResult); err != nil {
+			if err := json.Unmarshal([]byte(text), &result); err != nil {
 				t.Fatalf("unmarshal result: %v", err)
 			}
 
-			if len(txResult.Transactions) != 1 {
-				t.Fatalf("expected 1 transaction, got %d", len(txResult.Transactions))
+			if result.ChainID != "1" {
+				t.Errorf("chain_id: got %q, want %q", result.ChainID, "1")
 			}
-			tx := txResult.Transactions[0]
-
-			// Verify metadata.
-			if tx.ChainID != "1" {
-				t.Errorf("chain_id: got %q, want %q", tx.ChainID, "1")
+			if result.To != tt.wantTo {
+				t.Errorf("to: got %q, want %q", result.To, tt.wantTo)
 			}
-			if tx.SigningMode != "ecdsa_secp256k1" {
-				t.Errorf("signing_mode: got %q, want %q", tx.SigningMode, "ecdsa_secp256k1")
+			if result.Nonce != tt.wantNonce {
+				t.Errorf("nonce: got %q, want %q", result.Nonce, tt.wantNonce)
 			}
-
-			// Decode the unsigned tx hex using the Vultisig recipes SDK.
-			rawBytes, err := hex.DecodeString(tx.UnsignedTxHex)
-			if err != nil {
-				t.Fatalf("decode unsigned_tx_hex: %v", err)
+			if result.GasLimit != tt.wantGas {
+				t.Errorf("gas_limit: got %q, want %q", result.GasLimit, tt.wantGas)
 			}
-			if len(rawBytes) == 0 {
-				t.Fatal("empty unsigned_tx_hex")
+			if result.MaxFeePerGas != tt.wantMaxFee {
+				t.Errorf("max_fee_per_gas: got %q, want %q", result.MaxFeePerGas, tt.wantMaxFee)
 			}
-			if rawBytes[0] != ethtypes.DynamicFeeTxType {
-				t.Fatalf("expected EIP-1559 type prefix 0x02, got 0x%02x", rawBytes[0])
+			if result.MaxPriorityFeePerGas != tt.wantMaxPriorityFee {
+				t.Errorf("max_priority_fee_per_gas: got %q, want %q", result.MaxPriorityFeePerGas, tt.wantMaxPriorityFee)
 			}
-
-			decoded, err := reth.DecodeUnsignedPayload(rawBytes)
-			if err != nil {
-				t.Fatalf("DecodeUnsignedPayload: %v", err)
+			if result.Data != tt.data {
+				t.Errorf("data: got %q, want %q", result.Data, tt.data)
 			}
-			dftx, ok := decoded.(*ethtypes.DynamicFeeTx)
-			if !ok {
-				t.Fatalf("expected *DynamicFeeTx, got %T", decoded)
-			}
-
-			// Verify decoded fields match inputs.
-			if dftx.Nonce != tt.wantNonce {
-				t.Errorf("nonce: got %d, want %d", dftx.Nonce, tt.wantNonce)
-			}
-			if dftx.Gas != tt.wantGas {
-				t.Errorf("gas: got %d, want %d", dftx.Gas, tt.wantGas)
-			}
-			if dftx.GasFeeCap.String() != tt.wantMaxFee {
-				t.Errorf("max_fee: got %s, want %s", dftx.GasFeeCap.String(), tt.wantMaxFee)
-			}
-			if dftx.GasTipCap.String() != tt.wantMaxPriorityFee {
-				t.Errorf("max_priority_fee: got %s, want %s", dftx.GasTipCap.String(), tt.wantMaxPriorityFee)
-			}
-			if dftx.ChainID.Int64() != 1 {
-				t.Errorf("chain_id: got %d, want 1", dftx.ChainID.Int64())
-			}
-			if dftx.Value.Sign() != 0 {
-				t.Errorf("value: got %s, want 0", dftx.Value.String())
-			}
-
-			// Verify calldata round-trips through encode→decode.
-			wantData, _ := hexToBytes(tt.data)
-			gotData := dftx.Data
-			if hex.EncodeToString(gotData) != hex.EncodeToString(wantData) {
-				t.Errorf("data mismatch after decode")
+			if result.TxType != 2 {
+				t.Errorf("tx_type: got %d, want 2", result.TxType)
 			}
 		})
 	}
@@ -551,23 +511,18 @@ func TestSparkDepositWorkflow(t *testing.T) {
 			}
 
 			text := resultText(t, res)
-			var txResult struct {
-				Transactions []struct {
-					UnsignedTxHex string `json:"unsigned_tx_hex"`
-				} `json:"transactions"`
+			var result struct {
+				ChainID string `json:"chain_id"`
+				TxType  int    `json:"tx_type"`
 			}
-			if err := json.Unmarshal([]byte(text), &txResult); err != nil {
+			if err := json.Unmarshal([]byte(text), &result); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if len(txResult.Transactions) == 0 {
-				t.Fatal("no transactions in result")
+			if result.ChainID != "1" {
+				t.Errorf("chain_id: got %q, want %q", result.ChainID, "1")
 			}
-
-			// Verify the tx can be decoded by the signer SDK.
-			rawBytes, _ := hex.DecodeString(txResult.Transactions[0].UnsignedTxHex)
-			_, err = reth.DecodeUnsignedPayload(rawBytes)
-			if err != nil {
-				t.Fatalf("DecodeUnsignedPayload failed: %v", err)
+			if result.TxType != 2 {
+				t.Errorf("tx_type: got %d, want 2", result.TxType)
 			}
 		})
 	}
@@ -633,44 +588,27 @@ func TestSparkWithdrawWorkflow(t *testing.T) {
 	}
 
 	text := resultText(t, res)
-	var txResult struct {
-		Transactions []struct {
-			UnsignedTxHex string            `json:"unsigned_tx_hex"`
-			TxDetails     map[string]string `json:"tx_details"`
-		} `json:"transactions"`
+	var result struct {
+		Nonce    string `json:"nonce"`
+		GasLimit string `json:"gas_limit"`
+		Data     string `json:"data"`
+		TxType   int    `json:"tx_type"`
 	}
-	json.Unmarshal([]byte(text), &txResult)
-	if len(txResult.Transactions) != 1 {
-		t.Fatalf("expected 1 tx, got %d", len(txResult.Transactions))
-	}
-
-	// Verify tx_details reflect the withdraw parameters.
-	details := txResult.Transactions[0].TxDetails
-	if details["nonce"] != "13" {
-		t.Errorf("nonce: got %q, want %q", details["nonce"], "13")
-	}
-	if details["gas_limit"] != "104414" {
-		t.Errorf("gas_limit: got %q, want %q", details["gas_limit"], "104414")
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
 
-	// Decode and verify the unsigned payload.
-	rawBytes, _ := hex.DecodeString(txResult.Transactions[0].UnsignedTxHex)
-	decoded, err := reth.DecodeUnsignedPayload(rawBytes)
-	if err != nil {
-		t.Fatalf("DecodeUnsignedPayload: %v", err)
+	if result.Nonce != "13" {
+		t.Errorf("nonce: got %q, want %q", result.Nonce, "13")
 	}
-	dftx := decoded.(*ethtypes.DynamicFeeTx)
-	if dftx.Nonce != 13 {
-		t.Errorf("decoded nonce: got %d, want 13", dftx.Nonce)
+	if result.GasLimit != "104414" {
+		t.Errorf("gas_limit: got %q, want %q", result.GasLimit, "104414")
 	}
-	if dftx.Gas != 104414 {
-		t.Errorf("decoded gas: got %d, want 104414", dftx.Gas)
+	if result.Data != wantWithdrawCalldata {
+		t.Errorf("data: got %q, want %q", result.Data, wantWithdrawCalldata)
 	}
-
-	// Verify calldata matches.
-	wantData, _ := hexToBytes(wantWithdrawCalldata)
-	if hex.EncodeToString(dftx.Data) != hex.EncodeToString(wantData) {
-		t.Error("decoded calldata does not match withdraw calldata")
+	if result.TxType != 2 {
+		t.Errorf("tx_type: got %d, want 2", result.TxType)
 	}
 }
 
@@ -694,22 +632,16 @@ func TestBuildEVMTx_Deterministic(t *testing.T) {
 		"chain_id":                 "1",
 	}
 
-	var hexes [2]string
-	for i := range hexes {
+	var outputs [2]string
+	for i := range outputs {
 		res, err := handler(ctx, callToolReq("build_evm_tx", args))
 		if err != nil {
 			t.Fatalf("handler error [%d]: %v", i, err)
 		}
-		var txResult struct {
-			Transactions []struct {
-				UnsignedTxHex string `json:"unsigned_tx_hex"`
-			} `json:"transactions"`
-		}
-		json.Unmarshal([]byte(resultText(t, res)), &txResult)
-		hexes[i] = txResult.Transactions[0].UnsignedTxHex
+		outputs[i] = resultText(t, res)
 	}
 
-	if hexes[0] != hexes[1] {
-		t.Errorf("non-deterministic output:\n  run1: %s\n  run2: %s", hexes[0], hexes[1])
+	if outputs[0] != outputs[1] {
+		t.Errorf("non-deterministic output:\n  run1: %s\n  run2: %s", outputs[0], outputs[1])
 	}
 }

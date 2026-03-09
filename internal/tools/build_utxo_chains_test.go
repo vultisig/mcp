@@ -214,7 +214,7 @@ func TestBuildLTCSend_Basic(t *testing.T) {
 	handler := handleBuildLTCSend(store)
 
 	req := callToolReq("build_ltc_send", map[string]any{
-		"to_address": "LaMT348PWRnrqeeWArpwQPbuanWJByHxvT",
+		"to_address": senderAddr,
 		"amount":     "100000",
 		"fee_rate":   float64(10),
 	})
@@ -319,7 +319,7 @@ func TestBuildDASHSend_Basic(t *testing.T) {
 	handler := handleBuildDASHSend(store)
 
 	req := callToolReq("build_dash_send", map[string]any{
-		"to_address": "XqHiz8VqVZBmRFzYDZhZkLzuWEHvBa1Gy",
+		"to_address": senderAddr,
 		"amount":     "100000000",
 		"fee_rate":   float64(5),
 	})
@@ -353,7 +353,7 @@ func TestBuildZECSend_Basic(t *testing.T) {
 	handler := handleBuildZECSend(store)
 
 	req := callToolReq("build_zec_send", map[string]any{
-		"to_address": "t1VpYecAViRqAc73MAqnpDkMGt29EFAgm68",
+		"to_address": senderAddr,
 		"amount":     "100000000",
 	})
 
@@ -384,11 +384,12 @@ func TestBuildZECSend_Basic(t *testing.T) {
 
 func TestBuildZECSend_WithMemo(t *testing.T) {
 	store := setupVaultForChain(t)
+	recipientAddr := deriveChainAddr(t, common.Zcash)
 
 	handler := handleBuildZECSend(store)
 
 	req := callToolReq("build_zec_send", map[string]any{
-		"to_address": "t1VpYecAViRqAc73MAqnpDkMGt29EFAgm68",
+		"to_address": recipientAddr,
 		"amount":     "100000000",
 		"memo":       "SWAP:ETH.ETH:0xabc",
 	})

@@ -19,7 +19,6 @@ import (
 
 	"github.com/vultisig/mcp/internal/jupiter"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
-	"github.com/vultisig/mcp/internal/types"
 	"github.com/vultisig/mcp/internal/vault"
 	sdk "github.com/vultisig/recipes/sdk"
 	solanasdk "github.com/vultisig/recipes/sdk/solana"
@@ -139,31 +138,25 @@ func TestBuildSolanaTx_VaultDerived(t *testing.T) {
 		t.Fatalf("unexpected Go error: %v", err)
 	}
 
-	// The RPC call will fail (localhost:0), but address derivation should succeed first.
-	// We expect an RPC error, not an address derivation error.
-	if !res.IsError {
-		// If somehow it didn't error (unexpected), verify the result structure
-		text := resultText(t, res)
-		var result types.TransactionResult
-		err = json.Unmarshal([]byte(text), &result)
-		if err != nil {
-			t.Fatalf("unmarshal result: %v", err)
-		}
-		if result.Transactions[0].SigningMode != types.SigningModeEdDSA {
-			t.Errorf("signing mode = %q, want %q", result.Transactions[0].SigningMode, types.SigningModeEdDSA)
-		}
-		return
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
 
-	if len(res.Content) == 0 {
-		t.Fatal("expected error content, got empty")
+	text := resultText(t, res)
+	var result struct {
+		Chain       string `json:"chain"`
+		Action      string `json:"action"`
+		SigningMode string `json:"signing_mode"`
 	}
-	tc, ok := res.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", res.Content[0])
+	err = json.Unmarshal([]byte(text), &result)
+	if err != nil {
+		t.Fatalf("unmarshal result: %v", err)
 	}
-	if strings.Contains(tc.Text, "vault info") || strings.Contains(tc.Text, "derive") {
-		t.Fatalf("expected RPC error, got address error: %s", tc.Text)
+	if result.Chain != "Solana" {
+		t.Errorf("chain = %q, want %q", result.Chain, "Solana")
+	}
+	if result.SigningMode != "eddsa_ed25519" {
+		t.Errorf("signing_mode = %q, want %q", result.SigningMode, "eddsa_ed25519")
 	}
 }
 
@@ -465,30 +458,28 @@ func TestBuildSolanaSwap_DefaultSlippageAndInputMint(t *testing.T) {
 	}
 
 	text := resultText(t, res)
-	var result types.TransactionResult
+	var result struct {
+		Chain       string `json:"chain"`
+		Action      string `json:"action"`
+		SigningMode string `json:"signing_mode"`
+		InputMint   string `json:"input_mint"`
+	}
 	err = json.Unmarshal([]byte(text), &result)
 	if err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 
-	if len(result.Transactions) != 1 {
-		t.Fatalf("expected 1 transaction, got %d", len(result.Transactions))
+	if result.Chain != "Solana" {
+		t.Errorf("chain = %q, want Solana", result.Chain)
 	}
-	tx := result.Transactions[0]
-	if tx.Chain != "Solana" {
-		t.Errorf("chain = %q, want Solana", tx.Chain)
+	if result.Action != "swap" {
+		t.Errorf("action = %q, want swap", result.Action)
 	}
-	if tx.Action != "swap" {
-		t.Errorf("action = %q, want swap", tx.Action)
+	if result.SigningMode != "eddsa_ed25519" {
+		t.Errorf("signing_mode = %q, want %q", result.SigningMode, "eddsa_ed25519")
 	}
-	if tx.SigningMode != types.SigningModeEdDSA {
-		t.Errorf("signing mode = %q, want %q", tx.SigningMode, types.SigningModeEdDSA)
-	}
-	if tx.UnsignedTxHex == "" {
-		t.Error("unsigned tx hex is empty")
-	}
-	if tx.TxDetails["input_mint"] != solana.SolMint.String() {
-		t.Errorf("input_mint = %q, want SOL mint (default)", tx.TxDetails["input_mint"])
+	if result.InputMint != solana.SolMint.String() {
+		t.Errorf("input_mint = %q, want SOL mint (default)", result.InputMint)
 	}
 }
 
