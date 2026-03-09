@@ -152,44 +152,41 @@ func handleGetPosition(store *vault.Store, ethClient *evmclient.Client) server.T
 		user := ethcommon.HexToAddress(addr)
 		eth := ethClient.ETH()
 
+		// Build strategy address array for batch query
+		strategyNames := []string{"stETH", "cbETH", "rETH"}
+		strategyAddrs := make([]ethcommon.Address, len(strategyNames))
+		for i, name := range strategyNames {
+			strategyAddrs[i] = Strategies[name].Strategy
+		}
+
+		// Query all shares in one call via DelegationManager.getWithdrawableShares
+		sharesData, err := delegationManagerABI.Pack("getWithdrawableShares", user, strategyAddrs)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("encode getWithdrawableShares: %v", err)), nil
+		}
+		sharesResult, err := eth.CallContract(ctx, callMsg(DelegationManagerAddress, sharesData), nil)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("query shares: %v", err)), nil
+		}
+
+		sharesValues, err := delegationManagerABI.Unpack("getWithdrawableShares", sharesResult)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("decode shares: %v", err)), nil
+		}
+
+		withdrawableShares := sharesValues[0].([]*big.Int)
+
 		var lines string
 		lines = fmt.Sprintf("EigenLayer Restaking Positions\nAddress: %s\n", addr)
 
-		for _, name := range []string{"stETH", "cbETH", "rETH"} {
+		for i, name := range strategyNames {
 			si := Strategies[name]
+			shares := withdrawableShares[i]
 
-			// Query shares
-			sharesData, err := strategyManagerABI.Pack("stakerStrategyShares", user, si.Strategy)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("encode stakerStrategyShares: %v", err)), nil
-			}
-			sharesResult, err := eth.CallContract(ctx, callMsg(StrategyManagerAddress, sharesData), nil)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("query %s shares: %v", si.Symbol, err)), nil
-			}
-			shares := new(big.Int).SetBytes(sharesResult)
-
-			// Convert shares to underlying
-			var underlying *big.Int
-			if shares.Sign() > 0 {
-				convData, err := strategyABI.Pack("sharesToUnderlyingView", shares)
-				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("encode sharesToUnderlying: %v", err)), nil
-				}
-				convResult, err := eth.CallContract(ctx, callMsg(si.Strategy, convData), nil)
-				if err != nil {
-					return mcp.NewToolResultError(fmt.Sprintf("query %s conversion: %v", si.Symbol, err)), nil
-				}
-				underlying = new(big.Int).SetBytes(convResult)
-			} else {
-				underlying = big.NewInt(0)
-			}
-
-			lines += fmt.Sprintf("\n%s Strategy (%s):\n  Shares: %s\n  Underlying: %s %s",
+			lines += fmt.Sprintf("\n%s Strategy (%s):\n  Withdrawable Shares: %s %s",
 				si.Symbol,
 				si.Strategy.Hex()[:10]+"...",
-				evmclient.FormatUnits(shares, 18),
-				evmclient.FormatUnits(underlying, si.Decimals),
+				evmclient.FormatUnits(shares, si.Decimals),
 				si.Symbol,
 			)
 		}

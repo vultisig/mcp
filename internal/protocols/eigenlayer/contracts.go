@@ -51,13 +51,13 @@ var Strategies = map[string]StrategyInfo{
 // ABI definitions.
 var (
 	strategyManagerABI = mustParseABI(`[
-		{"name":"depositIntoStrategy","type":"function","inputs":[{"name":"strategy","type":"address"},{"name":"token","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"name":"shares","type":"uint256"}]},
-		{"name":"stakerStrategyShares","type":"function","inputs":[{"name":"staker","type":"address"},{"name":"strategy","type":"address"}],"outputs":[{"name":"","type":"uint256"}]}
+		{"name":"depositIntoStrategy","type":"function","inputs":[{"name":"strategy","type":"address"},{"name":"token","type":"address"},{"name":"amount","type":"uint256"}],"outputs":[{"name":"shares","type":"uint256"}]}
 	]`)
 
 	delegationManagerABI = mustParseABI(`[
 		{"name":"delegatedTo","type":"function","inputs":[{"name":"staker","type":"address"}],"outputs":[{"name":"","type":"address"}]},
-		{"name":"isDelegated","type":"function","inputs":[{"name":"staker","type":"address"}],"outputs":[{"name":"","type":"bool"}]}
+		{"name":"isDelegated","type":"function","inputs":[{"name":"staker","type":"address"}],"outputs":[{"name":"","type":"bool"}]},
+		{"name":"getWithdrawableShares","type":"function","inputs":[{"name":"staker","type":"address"},{"name":"strategies","type":"address[]"}],"outputs":[{"name":"withdrawableShares","type":"uint256[]"},{"name":"depositShares","type":"uint256[]"}]}
 	]`)
 
 	strategyABI = mustParseABI(`[
