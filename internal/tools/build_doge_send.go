@@ -12,6 +12,7 @@ import (
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
+	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -45,7 +46,7 @@ func newBuildDOGESendTool() mcp.Tool {
 	)
 }
 
-func handleBuildDOGESend(store *vault.Store) server.ToolHandlerFunc {
+func handleBuildDOGESend(store *vault.Store, _ *blockchair.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {
@@ -65,7 +66,7 @@ func handleBuildDOGESend(store *vault.Store) server.ToolHandlerFunc {
 		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat <= 0 {
 			return mcp.NewToolResultError("fee_rate must be a valid positive number"), nil
 		}
-		feeRate := uint64(math.Round(feeRateFloat))
+		feeRate := uint64(math.Ceil(feeRateFloat))
 
 		memo := req.GetString("memo", "")
 		if memo != "" && len(memo) > 80 {

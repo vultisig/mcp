@@ -211,7 +211,7 @@ func TestBuildLTCSend_Basic(t *testing.T) {
 	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Litecoin)
 
-	handler := handleBuildLTCSend(store)
+	handler := handleBuildLTCSend(store, nil)
 
 	req := callToolReq("build_ltc_send", map[string]any{
 		"to_address": senderAddr,
@@ -242,13 +242,16 @@ func TestBuildLTCSend_Basic(t *testing.T) {
 	if result["action"] != "transfer" {
 		t.Errorf("expected action transfer, got %v", result["action"])
 	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
+	}
 }
 
 func TestBuildDOGESend_Basic(t *testing.T) {
 	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Dogecoin)
 
-	handler := handleBuildDOGESend(store)
+	handler := handleBuildDOGESend(store, nil)
 
 	req := callToolReq("build_doge_send", map[string]any{
 		"to_address": "DDogepartyxxxxxxxxxxxxxxxxxxw1dfzr",
@@ -276,13 +279,16 @@ func TestBuildDOGESend_Basic(t *testing.T) {
 	if result["from"] != senderAddr {
 		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
 	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
+	}
 }
 
 func TestBuildBCHSend_Basic(t *testing.T) {
 	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.BitcoinCash)
 
-	handler := handleBuildBCHSend(store)
+	handler := handleBuildBCHSend(store, nil)
 
 	req := callToolReq("build_bch_send", map[string]any{
 		"to_address": "bitcoincash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0rq9sywjpyy",
@@ -310,13 +316,16 @@ func TestBuildBCHSend_Basic(t *testing.T) {
 	if result["from"] != senderAddr {
 		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
 	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
+	}
 }
 
 func TestBuildDASHSend_Basic(t *testing.T) {
 	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Dash)
 
-	handler := handleBuildDASHSend(store)
+	handler := handleBuildDASHSend(store, nil)
 
 	req := callToolReq("build_dash_send", map[string]any{
 		"to_address": senderAddr,
@@ -344,13 +353,16 @@ func TestBuildDASHSend_Basic(t *testing.T) {
 	if result["from"] != senderAddr {
 		t.Errorf("expected from %s, got %v", senderAddr, result["from"])
 	}
+	if result["tx_encoding"] != "psbt" {
+		t.Errorf("expected tx_encoding psbt, got %v", result["tx_encoding"])
+	}
 }
 
 func TestBuildZECSend_Basic(t *testing.T) {
 	store := setupVaultForChain(t)
 	senderAddr := deriveChainAddr(t, common.Zcash)
 
-	handler := handleBuildZECSend(store)
+	handler := handleBuildZECSend(store, nil)
 
 	req := callToolReq("build_zec_send", map[string]any{
 		"to_address": senderAddr,
@@ -380,13 +392,19 @@ func TestBuildZECSend_Basic(t *testing.T) {
 	if result["action"] != "transfer" {
 		t.Errorf("expected action transfer, got %v", result["action"])
 	}
+	if result["tx_encoding"] != "zcash_v4" {
+		t.Errorf("expected tx_encoding zcash_v4, got %v", result["tx_encoding"])
+	}
+	if _, hasFeeRate := result["fee_rate"]; hasFeeRate {
+		t.Errorf("expected no fee_rate in ZEC result")
+	}
 }
 
 func TestBuildZECSend_WithMemo(t *testing.T) {
 	store := setupVaultForChain(t)
 	recipientAddr := deriveChainAddr(t, common.Zcash)
 
-	handler := handleBuildZECSend(store)
+	handler := handleBuildZECSend(store, nil)
 
 	req := callToolReq("build_zec_send", map[string]any{
 		"to_address": recipientAddr,
@@ -413,5 +431,8 @@ func TestBuildZECSend_WithMemo(t *testing.T) {
 	}
 	if result["memo"] != "SWAP:ETH.ETH:0xabc" {
 		t.Errorf("unexpected memo: %v", result["memo"])
+	}
+	if result["tx_encoding"] != "zcash_v4" {
+		t.Errorf("expected tx_encoding zcash_v4, got %v", result["tx_encoding"])
 	}
 }

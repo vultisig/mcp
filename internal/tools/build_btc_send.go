@@ -12,6 +12,7 @@ import (
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
+	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -20,7 +21,7 @@ func newBuildBTCSendTool() mcp.Tool {
 	return mcp.NewTool("build_btc_send",
 		mcp.WithDescription(
 			"Return Bitcoin transaction arguments for a send or swap. "+
-				"Validates addresses and returns inputs/outputs structure for the client to build the PSBT. "+
+				"Validates addresses and returns parameters for the client to fetch UTXOs and build the PSBT. "+
 				"For THORChain swaps, provide the memo parameter. "+
 				"Requires set_vault_info to be called first.",
 		),
@@ -45,7 +46,7 @@ func newBuildBTCSendTool() mcp.Tool {
 	)
 }
 
-func handleBuildBTCSend(store *vault.Store) server.ToolHandlerFunc {
+func handleBuildBTCSend(store *vault.Store, _ *blockchair.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {
@@ -65,7 +66,7 @@ func handleBuildBTCSend(store *vault.Store) server.ToolHandlerFunc {
 		if math.IsNaN(feeRateFloat) || math.IsInf(feeRateFloat, 0) || feeRateFloat <= 0 {
 			return mcp.NewToolResultError("fee_rate must be a valid positive number"), nil
 		}
-		feeRate := uint64(math.Round(feeRateFloat))
+		feeRate := uint64(math.Ceil(feeRateFloat))
 
 		memo := req.GetString("memo", "")
 		if memo != "" && len(memo) > 80 {

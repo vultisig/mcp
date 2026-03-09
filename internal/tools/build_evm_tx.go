@@ -67,7 +67,7 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		}
 		if cidStr := req.GetString("chain_id", ""); cidStr != "" {
 			cid, cidOK := new(big.Int).SetString(cidStr, 10)
-			if !cidOK {
+			if !cidOK || cid.Sign() <= 0 {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid chain_id: %s", cidStr)), nil
 			}
 			chainID = cid
@@ -85,8 +85,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing value parameter"), nil
 		}
-		_, valueOK := new(big.Int).SetString(valueStr, 10)
-		if !valueOK {
+		valueInt, valueOK := new(big.Int).SetString(valueStr, 10)
+		if !valueOK || valueInt.Sign() < 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid value: %s", valueStr)), nil
 		}
 
@@ -102,8 +102,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing nonce parameter"), nil
 		}
-		_, nonceOK := new(big.Int).SetString(nonceStr, 10)
-		if !nonceOK {
+		nonceInt, nonceOK := new(big.Int).SetString(nonceStr, 10)
+		if !nonceOK || nonceInt.Sign() < 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid nonce: %s", nonceStr)), nil
 		}
 
@@ -111,8 +111,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing gas_limit parameter"), nil
 		}
-		_, gasOK := new(big.Int).SetString(gasLimitStr, 10)
-		if !gasOK {
+		gasInt, gasOK := new(big.Int).SetString(gasLimitStr, 10)
+		if !gasOK || gasInt.Sign() <= 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid gas_limit: %s", gasLimitStr)), nil
 		}
 
@@ -120,8 +120,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing max_fee_per_gas parameter"), nil
 		}
-		_, maxFeeOK := new(big.Int).SetString(maxFeeStr, 10)
-		if !maxFeeOK {
+		maxFeeInt, maxFeeOK := new(big.Int).SetString(maxFeeStr, 10)
+		if !maxFeeOK || maxFeeInt.Sign() <= 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid max_fee_per_gas: %s", maxFeeStr)), nil
 		}
 
@@ -129,8 +129,8 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError("missing max_priority_fee_per_gas parameter"), nil
 		}
-		_, maxPriorityOK := new(big.Int).SetString(maxPriorityFeeStr, 10)
-		if !maxPriorityOK {
+		maxPriorityInt, maxPriorityOK := new(big.Int).SetString(maxPriorityFeeStr, 10)
+		if !maxPriorityOK || maxPriorityInt.Sign() < 0 {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid max_priority_fee_per_gas: %s", maxPriorityFeeStr)), nil
 		}
 
@@ -149,7 +149,7 @@ func handleBuildEVMTx() server.ToolHandlerFunc {
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+			return nil, fmt.Errorf("marshal result: %w", err)
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

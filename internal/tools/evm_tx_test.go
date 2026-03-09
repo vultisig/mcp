@@ -216,6 +216,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 		wantGas            string
 		wantMaxFee         string
 		wantMaxPriorityFee string
+		wantChain          string
+		wantValue          string
 	}{
 		{
 			name:               "nonce7_approve_reset",
@@ -231,6 +233,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			wantGas:            "28767",
 			wantMaxFee:         "134966309",
 			wantMaxPriorityFee: "423",
+			wantChain:          "Ethereum",
+			wantValue:          "0",
 		},
 		{
 			name:               "nonce8_approve_1usdt",
@@ -246,6 +250,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			wantGas:            "48936",
 			wantMaxFee:         "137582443",
 			wantMaxPriorityFee: "423",
+			wantChain:          "Ethereum",
+			wantValue:          "0",
 		},
 		{
 			name:               "nonce9_deposit_1usdt",
@@ -261,6 +267,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			wantGas:            "150000",
 			wantMaxFee:         "137582443",
 			wantMaxPriorityFee: "423",
+			wantChain:          "Ethereum",
+			wantValue:          "0",
 		},
 		{
 			name:               "nonce12_deposit_1usdt_second",
@@ -276,6 +284,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			wantGas:            "105313",
 			wantMaxFee:         "82751424",
 			wantMaxPriorityFee: "15750",
+			wantChain:          "Ethereum",
+			wantValue:          "0",
 		},
 		{
 			name:               "nonce13_withdraw_with_interest",
@@ -291,6 +301,8 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			wantGas:            "104414",
 			wantMaxFee:         "133342876",
 			wantMaxPriorityFee: "15750",
+			wantChain:          "Ethereum",
+			wantValue:          "0",
 		},
 	}
 
@@ -314,8 +326,10 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 			text := resultText(t, res)
 
 			var result struct {
+				Chain                string `json:"chain"`
 				ChainID              string `json:"chain_id"`
 				To                   string `json:"to"`
+				Value                string `json:"value"`
 				Nonce                string `json:"nonce"`
 				GasLimit             string `json:"gas_limit"`
 				MaxFeePerGas         string `json:"max_fee_per_gas"`
@@ -327,11 +341,17 @@ func TestBuildEVMTx_SparkTransactions(t *testing.T) {
 				t.Fatalf("unmarshal result: %v", err)
 			}
 
+			if result.Chain != tt.wantChain {
+				t.Errorf("chain: got %q, want %q", result.Chain, tt.wantChain)
+			}
 			if result.ChainID != "1" {
 				t.Errorf("chain_id: got %q, want %q", result.ChainID, "1")
 			}
 			if result.To != tt.wantTo {
 				t.Errorf("to: got %q, want %q", result.To, tt.wantTo)
+			}
+			if result.Value != tt.wantValue {
+				t.Errorf("value: got %q, want %q", result.Value, tt.wantValue)
 			}
 			if result.Nonce != tt.wantNonce {
 				t.Errorf("nonce: got %q, want %q", result.Nonce, tt.wantNonce)

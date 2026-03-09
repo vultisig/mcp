@@ -11,6 +11,7 @@ import (
 	"github.com/vultisig/vultisig-go/address"
 	"github.com/vultisig/vultisig-go/common"
 
+	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/vault"
 )
@@ -40,7 +41,7 @@ func newBuildZECSendTool() mcp.Tool {
 	)
 }
 
-func handleBuildZECSend(store *vault.Store) server.ToolHandlerFunc {
+func handleBuildZECSend(store *vault.Store, _ *blockchair.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		toAddress, err := req.RequireString("to_address")
 		if err != nil {

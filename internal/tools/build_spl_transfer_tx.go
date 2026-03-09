@@ -20,7 +20,8 @@ func newBuildSPLTransferTxTool() mcp.Tool {
 		mcp.WithDescription(
 			"Return SPL token transfer arguments for the client to build and sign the transaction. "+
 				"Detects token program (SPL vs Token-2022) and returns token account addresses. "+
-				"For native SOL transfers (including wSOL mint So1111...1112), use build_solana_tx instead.",
+				"Supports wSOL (So1111...1112) as an SPL token ATA transfer. "+
+				"For native (unwrapped) SOL transfers use build_solana_tx instead.",
 		),
 		mcp.WithString("from",
 			mcp.Description("Sender's Solana address (base58). Optional if vault info is set."),
@@ -87,7 +88,7 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 			return mcp.NewToolResultError(fmt.Sprintf("failed to detect token program: %v", err)), nil
 		}
 		if tokenProgram == (solana.PublicKey{}) {
-			return mcp.NewToolResultError("native SOL transfers (including wSOL) should use build_solana_tx instead"), nil
+			return mcp.NewToolResultError(fmt.Sprintf("mint %s is not an SPL token", mintStr)), nil
 		}
 
 		fromATA, _, err := solanaclient.FindAssociatedTokenAddress(fromPubkey, mintPubkey, tokenProgram)
@@ -116,7 +117,7 @@ func handleBuildSPLTransferTx(store *vault.Store, solClient *solanaclient.Client
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+			return nil, fmt.Errorf("marshal result: %w", err)
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

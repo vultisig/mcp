@@ -69,18 +69,18 @@ func handleBuildSolanaTx(store *vault.Store, solClient *solanaclient.Client) ser
 		_ = solClient
 
 		result := map[string]any{
-			"chain":       "Solana",
-			"action":      "transfer",
-			"from":        fromAddr,
-			"to":          toStr,
-			"amount":      amountStr,
-			"ticker":      "SOL",
+			"chain":        "Solana",
+			"action":       "transfer",
+			"from":         fromAddr,
+			"to":           toStr,
+			"amount":       amountStr,
+			"ticker":       "SOL",
 			"signing_mode": "eddsa_ed25519",
 		}
 
 		data, err := json.Marshal(result)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("marshal result: %v", err)), nil
+			return nil, fmt.Errorf("marshal result: %w", err)
 		}
 		return mcp.NewToolResultText(string(data)), nil
 	}

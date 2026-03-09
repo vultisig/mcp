@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/gagliardetto/solana-go"
@@ -330,7 +329,7 @@ func verifySolanaSDKCompat(t *testing.T, txBytes []byte, wantInstructions int) {
 	}
 }
 
-func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
+func TestBuildSPLTransferTx_AcceptsWSOL(t *testing.T) {
 	store := vault.NewStore()
 	handler := handleBuildSPLTransferTx(store, solanaclient.NewClient(rpc.New("https://localhost:0")))
 	ctx := context.Background()
@@ -346,15 +345,20 @@ func TestBuildSPLTransferTx_RejectsNativeMint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected Go error: %v", err)
 	}
-	if !res.IsError {
-		t.Fatal("expected tool error for native SOL mint")
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
 	}
-	tc, ok := res.Content[0].(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected TextContent, got %T", res.Content[0])
+
+	text := resultText(t, res)
+	var result map[string]any
+	if err := json.Unmarshal([]byte(text), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if !strings.Contains(tc.Text, "build_solana_tx") {
-		t.Errorf("error should mention build_solana_tx, got: %s", tc.Text)
+	if result["action"] != "spl_transfer" {
+		t.Errorf("expected action spl_transfer, got %v", result["action"])
+	}
+	if result["mint"] != "So11111111111111111111111111111111111111112" {
+		t.Errorf("unexpected mint: %v", result["mint"])
 	}
 }
 

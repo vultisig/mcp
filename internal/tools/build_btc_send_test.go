@@ -87,19 +87,17 @@ func TestBTCFeeRate(t *testing.T) {
 
 func TestBTCFeeRate_HaltedChain(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := map[string]any{
-			"current_chain_heights": map[string]any{},
-			"chains": []map[string]any{
-				{
-					"chain":    "BTC",
-					"gas_rate": uint64(15),
-					"halted":   true,
-					"outbound": false,
-				},
+		addresses := []map[string]any{
+			{
+				"chain":          "BTC",
+				"address":        "fakefake",
+				"gas_rate":       "15",
+				"gas_rate_units": "satsperbyte",
+				"halted":         true,
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(addresses)
 		if err != nil {
 			t.Errorf("encode response: %v", err)
 		}
@@ -123,7 +121,7 @@ func TestBuildBTCSend_Basic(t *testing.T) {
 	store := setupBTCVault(t)
 	senderAddr := deriveBTCAddress(t, store)
 
-	handler := handleBuildBTCSend(store)
+	handler := handleBuildBTCSend(store, nil)
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -165,7 +163,7 @@ func TestBuildBTCSend_Basic(t *testing.T) {
 func TestBuildBTCSend_WithMemo(t *testing.T) {
 	store := setupBTCVault(t)
 
-	handler := handleBuildBTCSend(store)
+	handler := handleBuildBTCSend(store, nil)
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
@@ -199,7 +197,7 @@ func TestBuildBTCSend_WithMemo(t *testing.T) {
 func TestBuildBTCSend_MemoTooLong(t *testing.T) {
 	store := setupBTCVault(t)
 
-	handler := handleBuildBTCSend(store)
+	handler := handleBuildBTCSend(store, nil)
 
 	memo := ""
 	for i := 0; i < 81; i++ {
@@ -225,7 +223,7 @@ func TestBuildBTCSend_MemoTooLong(t *testing.T) {
 func TestBuildBTCSend_InvalidAddress(t *testing.T) {
 	store := setupBTCVault(t)
 
-	handler := handleBuildBTCSend(store)
+	handler := handleBuildBTCSend(store, nil)
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "not-a-valid-btc-address",
@@ -245,7 +243,7 @@ func TestBuildBTCSend_InvalidAddress(t *testing.T) {
 func TestBuildBTCSend_NoVault(t *testing.T) {
 	store := vault.NewStore()
 
-	handler := handleBuildBTCSend(store)
+	handler := handleBuildBTCSend(store, nil)
 
 	req := callToolReq("build_btc_send", map[string]any{
 		"to_address": "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
