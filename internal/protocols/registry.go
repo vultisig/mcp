@@ -11,6 +11,7 @@ import (
 
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/protocols/aavev3"
+	"github.com/vultisig/mcp/internal/protocols/etherfi"
 	"github.com/vultisig/mcp/internal/vault"
 )
 
@@ -22,6 +23,7 @@ type Protocol interface {
 
 var all = []Protocol{
 	&aavev3.Protocol{},
+	&etherfi.Protocol{},
 }
 
 // RegisterAll extracts the Ethereum client from the pool and registers all
