@@ -15,6 +15,7 @@ import (
 	"github.com/vultisig/mcp/internal/blockchair"
 	"github.com/vultisig/mcp/internal/coingecko"
 	"github.com/vultisig/mcp/internal/config"
+	"github.com/vultisig/mcp/internal/defillama"
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/fourbyte"
 	"github.com/vultisig/mcp/internal/jupiter"
@@ -45,6 +46,7 @@ func main() {
 	store := vault.NewStore()
 	cgClient := coingecko.NewClient()
 	bcClient := blockchair.NewClient(cfg.BlockchairURL)
+	dlClient := defillama.NewClient(cfg.DefillamaURL)
 
 	hooks := mcplog.NewHooks(logger)
 
@@ -73,7 +75,7 @@ func main() {
 
 	fbClient := fourbyte.NewClient()
 
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, fbClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, fbClient, dlClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)
