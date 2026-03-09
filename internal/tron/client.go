@@ -258,10 +258,14 @@ func AddressToHex(address string) (string, error) {
 }
 
 func FormatSUN(sun *big.Int) string {
+	neg := sun.Sign() < 0
+	abs := new(big.Int).Abs(sun)
 	divisor := big.NewInt(1_000_000)
-	whole := new(big.Int).Div(sun, divisor)
-	frac := new(big.Int).Mod(sun, divisor)
-	frac.Abs(frac)
+	whole := new(big.Int).Div(abs, divisor)
+	frac := new(big.Int).Mod(abs, divisor)
+	if neg {
+		return fmt.Sprintf("-%d.%06d", whole, frac)
+	}
 	return fmt.Sprintf("%d.%06d", whole, frac)
 }
 

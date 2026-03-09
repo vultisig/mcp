@@ -68,6 +68,8 @@ func TestFormatSUN(t *testing.T) {
 		{"fractional", big.NewInt(1_500_000), "1.500000"},
 		{"small amount", big.NewInt(1), "0.000001"},
 		{"large amount", big.NewInt(90_000_000_000_000_000), "90000000000.000000"},
+		{"negative sub-TRX", big.NewInt(-500_000), "-0.500000"},
+		{"negative full TRX", big.NewInt(-1_500_000), "-1.500000"},
 	}
 
 	for _, tt := range tests {
