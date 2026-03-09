@@ -220,6 +220,7 @@ func TestFormatTokenBalance(t *testing.T) {
 		{"6 decimals fractional", big.NewInt(1_500_000), 6, "1.5"},
 		{"18 decimals", new(big.Int).Mul(big.NewInt(15), new(big.Int).Exp(big.NewInt(10), big.NewInt(17), nil)), 18, "1.5"},
 		{"trailing zeros trimmed", big.NewInt(1_100_000), 6, "1.1"},
+		{"leading zeros in frac", big.NewInt(1_000_001), 6, "1.000001"},
 		{"zero balance", big.NewInt(0), 18, "0"},
 	}
 

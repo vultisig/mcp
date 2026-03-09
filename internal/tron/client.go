@@ -314,7 +314,7 @@ func FormatTokenBalance(balance *big.Int, decimals uint8) string {
 	whole := new(big.Int).Div(balance, divisor)
 	frac := new(big.Int).Mod(balance, divisor)
 
-	fracStr := fmt.Sprintf("%0*s", decimals, frac.String())
+	fracStr := fmt.Sprintf("%0*d", int(decimals), frac)
 	fracStr = strings.TrimRight(fracStr, "0")
 	if fracStr == "" {
 		return whole.String()
