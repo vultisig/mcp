@@ -18,6 +18,7 @@ require (
 	github.com/vultisig/recipes v0.0.0-20260224014344-cb8b6790d744
 	github.com/vultisig/vultisig-go v0.0.0-20260124100803-5ee9e9f8e9d5
 	github.com/xyield/xrpl-go v0.0.0-20230914223425-9abe75c05830
+	golang.org/x/sync v0.18.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -183,7 +184,6 @@ require (
 	golang.org/x/crypto v0.44.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
