@@ -14,15 +14,16 @@ import (
 	"github.com/vultisig/mcp/internal/jupiter"
 	"github.com/vultisig/mcp/internal/mayachain"
 	"github.com/vultisig/mcp/internal/protocols"
+	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/toolmeta"
 	pmtools "github.com/vultisig/mcp/internal/tools/polymarket"
-	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/vault"
+	"github.com/vultisig/mcp/internal/verifier"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, fbClient *fourbyte.Client, vcClient *verifier.Client) error {
 	// Utility tools (always-on)
 	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
 	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
@@ -86,6 +87,14 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 
 	// Polymarket prediction market tools
 	pmtools.RegisterAll(s, store, pool)
+
+	// Plugin management tools (require VERIFIER_URL to be configured)
+	if vcClient != nil {
+		toolmeta.Register(s, newGetRecipeSchemaTool(), handleGetRecipeSchema(vcClient), "plugin")
+		toolmeta.Register(s, newSuggestPolicyTool(), handleSuggestPolicy(vcClient), "plugin")
+		toolmeta.Register(s, newCheckPluginInstalledTool(), handleCheckPluginInstalled(vcClient), "plugin")
+		toolmeta.Register(s, newCheckBillingStatusTool(), handleCheckBillingStatus(vcClient), "plugin")
+	}
 
 	err := protocols.RegisterAll(s, store, pool)
 	if err != nil {

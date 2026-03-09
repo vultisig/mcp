@@ -38,6 +38,8 @@ Config uses `github.com/kelseyhightower/envconfig`. All EVM RPC URLs default to 
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 | `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
+| `VERIFIER_URL` | `""` | Verifier service base URL — enables plugin management tools when set |
+| `VERIFIER_API_KEY` | `""` | Service-to-service key sent as `X-Service-Key` for user-specific verifier queries |
 
 ## Architecture
 
@@ -67,7 +69,9 @@ internal/tools/
   abi_encode.go                  # ABI encode function calls / raw args
   abi_decode.go                  # ABI decode output data
   convert_amount.go
+  plugin.go                      # Plugin management tools (recipe schema, policy, billing)
   registry.go
+internal/verifier/client.go      # Verifier service client (plugin/billing queries)
 internal/coingecko/client.go     # CoinGecko REST API client
 internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisig proxy)
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
