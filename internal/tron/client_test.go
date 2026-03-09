@@ -150,6 +150,12 @@ func TestDecodeTRC20Decimals(t *testing.T) {
 	if got != 18 {
 		t.Errorf("DecodeTRC20Decimals() = %d, want 18", got)
 	}
+
+	hexData = strings.Repeat("00", 30) + "0100"
+	_, err = DecodeTRC20Decimals(hexData)
+	if err == nil {
+		t.Error("DecodeTRC20Decimals(256) should return error")
+	}
 }
 
 func TestDecodeTRC20Symbol(t *testing.T) {

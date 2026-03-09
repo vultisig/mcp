@@ -246,9 +246,13 @@ func ValidateAddress(address string) error {
 }
 
 func AddressToHex(address string) (string, error) {
+	err := ValidateAddress(address)
+	if err != nil {
+		return "", err
+	}
 	decoded := base58.Decode(address)
-	if len(decoded) < 21 {
-		return "", fmt.Errorf("invalid tron address")
+	if len(decoded) != 25 {
+		return "", fmt.Errorf("invalid tron address: decoded length %d, want 25", len(decoded))
 	}
 	return hex.EncodeToString(decoded[1:21]), nil
 }
@@ -258,7 +262,7 @@ func FormatSUN(sun *big.Int) string {
 	whole := new(big.Int).Div(sun, divisor)
 	frac := new(big.Int).Mod(sun, divisor)
 	frac.Abs(frac)
-	return fmt.Sprintf("%s.%06s", whole, frac)
+	return fmt.Sprintf("%d.%06d", whole, frac)
 }
 
 func DecodeTRC20Balance(hexData string) (*big.Int, error) {
@@ -275,11 +279,14 @@ func DecodeTRC20Balance(hexData string) (*big.Int, error) {
 }
 
 func DecodeTRC20Decimals(hexData string) (uint8, error) {
-	balance, err := DecodeTRC20Balance(hexData)
+	val, err := DecodeTRC20Balance(hexData)
 	if err != nil {
 		return 0, err
 	}
-	return uint8(balance.Uint64()), nil
+	if val.Cmp(big.NewInt(255)) > 0 {
+		return 0, fmt.Errorf("decimals value %s exceeds uint8 range", val)
+	}
+	return uint8(val.Uint64()), nil
 }
 
 func DecodeTRC20Symbol(hexData string) (string, error) {
