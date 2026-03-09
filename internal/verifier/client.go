@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"time"
 )
 
 var validPluginID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+// validPublicKey matches a compressed secp256k1 ECDSA public key: 33 bytes = 66 hex chars.
+var validPublicKey = regexp.MustCompile(`^[0-9a-fA-F]{66}$`)
 
 // Client calls the verifier service for plugin-related operations.
 type Client struct {
@@ -30,6 +34,12 @@ func NewClient(baseURL, apiKey string) *Client {
 			Timeout: 30 * time.Second,
 		},
 	}
+}
+
+// HasAPIKey reports whether the client has a service API key configured.
+// Tools that require X-Service-Key authentication should not be registered without one.
+func (c *Client) HasAPIKey() bool {
+	return c.apiKey != ""
 }
 
 // RecipeSchema represents a plugin's recipe specification.
@@ -176,7 +186,10 @@ type FeeStatus struct {
 // GetFeeStatus fetches billing status for a vault identified by its ECDSA public key.
 // Calls GET /service/fee/status?public_key={hex} with X-Service-Key auth.
 func (c *Client) GetFeeStatus(ctx context.Context, publicKey string) (*FeeStatus, error) {
-	url := fmt.Sprintf("%s/service/fee/status?public_key=%s", c.baseURL, publicKey)
+	if !validPublicKey.MatchString(publicKey) {
+		return nil, fmt.Errorf("invalid public key: must be 66 hex characters")
+	}
+	url := fmt.Sprintf("%s/service/fee/status?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -218,7 +231,10 @@ type installedPluginsResponse struct {
 // IsPluginInstalled checks if a plugin is installed for the vault identified by publicKey.
 // Calls GET /service/plugins/installed?public_key={hex} with X-Service-Key auth.
 func (c *Client) IsPluginInstalled(ctx context.Context, publicKey, pluginID string) (bool, error) {
-	url := fmt.Sprintf("%s/service/plugins/installed?public_key=%s", c.baseURL, publicKey)
+	if !validPublicKey.MatchString(publicKey) {
+		return false, fmt.Errorf("invalid public key: must be 66 hex characters")
+	}
+	url := fmt.Sprintf("%s/service/plugins/installed?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

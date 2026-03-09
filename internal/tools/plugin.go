@@ -7,6 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/vultisig/mcp/internal/resolve"
+	"github.com/vultisig/mcp/internal/vault"
 	"github.com/vultisig/mcp/internal/verifier"
 )
 
@@ -104,33 +106,30 @@ func handleSuggestPolicy(vc *verifier.Client) server.ToolHandlerFunc {
 func newCheckPluginInstalledTool() mcp.Tool {
 	return mcp.NewTool("check_plugin_installed",
 		mcp.WithDescription(
-			"Check whether a plugin is installed for a vault. "+
-				"Uses the vault's ECDSA public key to identify the user.",
+			"Check whether a plugin is installed for the current session's vault. "+
+				"Requires set_vault_info to have been called first.",
 		),
 		mcp.WithString("plugin_id",
 			mcp.Description("Plugin identifier to check"),
 			mcp.Required(),
 		),
-		mcp.WithString("public_key",
-			mcp.Description("Vault ECDSA public key (hex) identifying the user"),
-			mcp.Required(),
-		),
 	)
 }
 
-func handleCheckPluginInstalled(vc *verifier.Client) server.ToolHandlerFunc {
+func handleCheckPluginInstalled(store *vault.Store, vc *verifier.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		pluginID, err := req.RequireString("plugin_id")
 		if err != nil {
 			return mcp.NewToolResultError("plugin_id is required"), nil
 		}
 
-		publicKey, err := req.RequireString("public_key")
-		if err != nil {
-			return mcp.NewToolResultError("public_key is required"), nil
+		sessionID := resolve.SessionIDFromCtx(ctx)
+		v, ok := store.Get(sessionID)
+		if !ok {
+			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil
 		}
 
-		installed, err := vc.IsPluginInstalled(ctx, publicKey, pluginID)
+		installed, err := vc.IsPluginInstalled(ctx, v.ECDSAPublicKey, pluginID)
 		if err != nil {
 			return mcp.NewToolResultError("check plugin installed: " + err.Error()), nil
 		}
@@ -146,24 +145,21 @@ func handleCheckPluginInstalled(vc *verifier.Client) server.ToolHandlerFunc {
 func newCheckBillingStatusTool() mcp.Tool {
 	return mcp.NewTool("check_billing_status",
 		mcp.WithDescription(
-			"Check whether a vault's billing is active (free trial or billing plugin installed). "+
-				"Uses the vault's ECDSA public key to identify the user.",
-		),
-		mcp.WithString("public_key",
-			mcp.Description("Vault ECDSA public key (hex) identifying the user"),
-			mcp.Required(),
+			"Check whether the current session's vault has active billing (free trial or billing plugin installed). "+
+				"Requires set_vault_info to have been called first.",
 		),
 	)
 }
 
-func handleCheckBillingStatus(vc *verifier.Client) server.ToolHandlerFunc {
+func handleCheckBillingStatus(store *vault.Store, vc *verifier.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		publicKey, err := req.RequireString("public_key")
-		if err != nil {
-			return mcp.NewToolResultError("public_key is required"), nil
+		sessionID := resolve.SessionIDFromCtx(ctx)
+		v, ok := store.Get(sessionID)
+		if !ok {
+			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil
 		}
 
-		feeStatus, err := vc.GetFeeStatus(ctx, publicKey)
+		feeStatus, err := vc.GetFeeStatus(ctx, v.ECDSAPublicKey)
 		if err != nil {
 			return mcp.NewToolResultError("check billing status: " + err.Error()), nil
 		}
@@ -177,7 +173,7 @@ func handleCheckBillingStatus(vc *verifier.Client) server.ToolHandlerFunc {
 			return mcp.NewToolResultText(string(data)), nil
 		}
 
-		billingInstalled, err := vc.IsPluginInstalled(ctx, publicKey, billingPluginID)
+		billingInstalled, err := vc.IsPluginInstalled(ctx, v.ECDSAPublicKey, billingPluginID)
 		if err != nil {
 			return mcp.NewToolResultError("check billing app: " + err.Error()), nil
 		}
