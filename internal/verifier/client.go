@@ -189,9 +189,9 @@ func (c *Client) GetFeeStatus(ctx context.Context, publicKey string) (*FeeStatus
 	if !validPublicKey.MatchString(publicKey) {
 		return nil, fmt.Errorf("invalid public key: must be 66 hex characters")
 	}
-	url := fmt.Sprintf("%s/service/fee/status?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
+	reqURL := fmt.Sprintf("%s/service/fee/status?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -234,9 +234,9 @@ func (c *Client) IsPluginInstalled(ctx context.Context, publicKey, pluginID stri
 	if !validPublicKey.MatchString(publicKey) {
 		return false, fmt.Errorf("invalid public key: must be 66 hex characters")
 	}
-	url := fmt.Sprintf("%s/service/plugins/installed?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
+	reqURL := fmt.Sprintf("%s/service/plugins/installed?public_key=%s", c.baseURL, url.QueryEscape(publicKey))
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return false, fmt.Errorf("create request: %w", err)
 	}
