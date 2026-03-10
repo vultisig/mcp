@@ -18,6 +18,7 @@ import (
 	"github.com/vultisig/mcp/internal/defillama"
 	evmclient "github.com/vultisig/mcp/internal/evm"
 	"github.com/vultisig/mcp/internal/fourbyte"
+	gaiaclient "github.com/vultisig/mcp/internal/gaia"
 	"github.com/vultisig/mcp/internal/jupiter"
 	mcplog "github.com/vultisig/mcp/internal/logging"
 	"github.com/vultisig/mcp/internal/mayachain"
@@ -72,6 +73,9 @@ func main() {
 	tronClient := tronclient.NewClient(cfg.TronRPCURL)
 	logger.Printf("tron RPC: %s", cfg.TronRPCURL)
 
+	gaiaClient := gaiaclient.NewClient(cfg.GaiaRPCURL)
+	logger.Printf("gaia RPC: %s", cfg.GaiaRPCURL)
+
 	swapSvc := swap.NewService()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
 	mcClient := mayachain.NewClient(cfg.MayachainURL)
@@ -79,7 +83,7 @@ func main() {
 
 	fbClient := fourbyte.NewClient()
 
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, tronClient, fbClient, dlClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, tronClient, gaiaClient, fbClient, dlClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)
