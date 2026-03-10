@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/vultisig/mcp/internal/blockchair"
 	evmclient "github.com/vultisig/mcp/internal/evm"
+	gaiaclient "github.com/vultisig/mcp/internal/gaia"
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	tronclient "github.com/vultisig/mcp/internal/tron"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
@@ -34,7 +36,7 @@ func newGetTxStatusTool() mcp.Tool {
 	for c := range blockchair.SupportedChains {
 		allChains = append(allChains, c)
 	}
-	allChains = append(allChains, "Solana", "Ripple", "XRP", "Tron")
+	allChains = append(allChains, "Solana", "Ripple", "XRP", "Tron", "Cosmos", "Gaia")
 	sort.Strings(allChains)
 
 	return mcp.NewTool("get_tx_status",
@@ -62,11 +64,12 @@ type txStatusResult struct {
 	BlockNumber   int64  `json:"block_number,omitempty"`
 	Confirmations uint64 `json:"confirmations,omitempty"`
 	Fee           string `json:"fee,omitempty"`
+	GasUsed       string `json:"gas_used,omitempty"`
 	From          string `json:"from,omitempty"`
 	To            string `json:"to,omitempty"`
 }
 
-func handleGetTxStatus(pool *evmclient.Pool, bcClient *blockchair.Client, solClient *solanaclient.Client, xrpClient *xrpclient.Client, tronClient *tronclient.Client) server.ToolHandlerFunc {
+func handleGetTxStatus(pool *evmclient.Pool, bcClient *blockchair.Client, solClient *solanaclient.Client, xrpClient *xrpclient.Client, tronClient *tronclient.Client, gaiaClient *gaiaclient.Client) server.ToolHandlerFunc {
 	// Build lookup sets from canonical sources at init time.
 	evmChainSet := make(map[string]bool, len(evmclient.EVMChains))
 	for _, c := range evmclient.EVMChains {
@@ -96,6 +99,8 @@ func handleGetTxStatus(pool *evmclient.Pool, bcClient *blockchair.Client, solCli
 			result, err = getXRPTxStatus(ctx, xrpClient, txHash)
 		case chain == "Tron":
 			result, err = getTronTxStatus(ctx, tronClient, txHash)
+		case chain == "Cosmos" || chain == "Gaia":
+			result, err = getGaiaTxStatus(ctx, gaiaClient, txHash)
 		default:
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain %q for tx status lookup", chain)), nil
 		}
@@ -338,6 +343,50 @@ func getTronTxStatus(ctx context.Context, tronClient *tronclient.Client, txHash 
 	}
 	if info.Fee > 0 {
 		result.Fee = tronclient.FormatSUN(big.NewInt(info.Fee)) + " TRX"
+	}
+
+	return result, nil
+}
+
+func getGaiaTxStatus(ctx context.Context, gaiaClient *gaiaclient.Client, txHash string) (*txStatusResult, error) {
+	if !utxoTxHashRE.MatchString(txHash) {
+		return nil, fmt.Errorf("invalid Cosmos transaction hash: %s (expected 64 hex chars)", txHash)
+	}
+
+	txStatus, err := gaiaClient.GetTransactionStatus(ctx, txHash)
+	if err != nil {
+		if errors.Is(err, gaiaclient.ErrNotFound) {
+			return &txStatusResult{
+				Chain:  "Cosmos",
+				TxHash: txHash,
+				Status: "not_found",
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get Cosmos tx status: %v", err)
+	}
+
+	status := "confirmed"
+	success := txStatus.Code == 0
+	if !success {
+		status = "failed"
+	}
+
+	result := &txStatusResult{
+		Chain:   "Cosmos",
+		TxHash:  txHash,
+		Status:  status,
+		Success: success,
+	}
+
+	if txStatus.Height != "" && txStatus.Height != "0" {
+		height, parseErr := strconv.ParseInt(txStatus.Height, 10, 64)
+		if parseErr == nil {
+			result.BlockNumber = height
+		}
+	}
+
+	if txStatus.GasUsed != "" {
+		result.GasUsed = txStatus.GasUsed
 	}
 
 	return result, nil
