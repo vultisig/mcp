@@ -63,6 +63,16 @@ spec:
                 configMapKeyRef:
                   name: mcp-config
                   key: gaia-rpc-url
+            - name: VERIFIER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: mcp-config
+                  key: verifier-url
+            - name: VERIFIER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mcp-secrets
+                  key: verifier-api-key
           resources:
             requests:
               memory: "32Mi"

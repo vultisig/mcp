@@ -8,3 +8,4 @@ data:
   xrp-rpc-url: "https://s1.ripple.com:51234"
   tron-rpc-url: "https://api.trongrid.io"
   gaia-rpc-url: "https://cosmos-rest.publicnode.com"
+  verifier-url: "https://verifier.vultisig.com"
