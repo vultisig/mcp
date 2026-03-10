@@ -25,6 +25,7 @@ import (
 	solanaclient "github.com/vultisig/mcp/internal/solana"
 	"github.com/vultisig/mcp/internal/thorchain"
 	"github.com/vultisig/mcp/internal/tools"
+	tronclient "github.com/vultisig/mcp/internal/tron"
 	"github.com/vultisig/mcp/internal/vault"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
@@ -68,6 +69,9 @@ func main() {
 	xrpClient := xrpclient.NewClient(cfg.XrpRpcURL)
 	logger.Printf("xrp RPC: %s", cfg.XrpRpcURL)
 
+	tronClient := tronclient.NewClient(cfg.TronRPCURL)
+	logger.Printf("tron RPC: %s", cfg.TronRPCURL)
+
 	swapSvc := swap.NewService()
 	tcClient := thorchain.NewClient(cfg.ThorchainURL)
 	mcClient := mayachain.NewClient(cfg.MayachainURL)
@@ -75,7 +79,7 @@ func main() {
 
 	fbClient := fourbyte.NewClient()
 
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, fbClient, dlClient); err != nil {
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, tronClient, fbClient, dlClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)
