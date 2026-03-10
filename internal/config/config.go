@@ -39,7 +39,9 @@ type Config struct {
 	XrpRpcURL     string `envconfig:"XRP_RPC_URL" default:"https://s1.ripple.com:51234"`
 	VerifierURL    string `envconfig:"VERIFIER_URL" default:""`
 	VerifierAPIKey string `envconfig:"VERIFIER_API_KEY" default:""`
+	TronRPCURL    string `envconfig:"TRON_RPC_URL" default:"https://api.trongrid.io"`
 	DefillamaURL  string `envconfig:"DEFILLAMA_URL" default:"https://api.llama.fi"`
+	GaiaRPCURL    string `envconfig:"GAIA_RPC_URL" default:"https://cosmos-rest.publicnode.com"`
 }
 
 // ToURLMap converts the EVM RPC config to a chain-name → URL map,
