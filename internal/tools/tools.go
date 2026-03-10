@@ -22,10 +22,11 @@ import (
 	pmtools "github.com/vultisig/mcp/internal/tools/polymarket"
 	tronclient "github.com/vultisig/mcp/internal/tron"
 	"github.com/vultisig/mcp/internal/vault"
+	"github.com/vultisig/mcp/internal/verifier"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
-func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client, tronClient *tronclient.Client, gaiaClient *gaiaclient.Client, fbClient *fourbyte.Client, dlClient *defillama.Client) error {
+func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, cgClient *coingecko.Client, bcClient *blockchair.Client, swapSvc *swap.Service, tcClient *thorchain.Client, mcClient *mayachain.Client, solClient *solanaclient.Client, jupClient *jupiter.Client, xrpClient *xrpclient.Client,tronClient *tronclient.Client, gaiaClient *gaiaclient.Client, fbClient *fourbyte.Client, vcClient *verifier.Client, dlClient *defillama.Client) error {
 	// Utility tools (always-on)
 	toolmeta.Register(s, newSetVaultInfoTool(), handleSetVaultInfo(store), "utility")
 	toolmeta.Register(s, newGetAddressTool(), handleGetAddress(store), "utility")
@@ -105,6 +106,17 @@ func RegisterAll(s *server.MCPServer, store *vault.Store, pool *evmclient.Pool, 
 
 	// Polymarket prediction market tools
 	pmtools.RegisterAll(s, store, pool)
+
+	// Plugin management tools (require VERIFIER_URL to be configured)
+	if vcClient != nil {
+		toolmeta.Register(s, newGetRecipeSchemaTool(), handleGetRecipeSchema(vcClient), "plugin")
+		toolmeta.Register(s, newSuggestPolicyTool(), handleSuggestPolicy(vcClient), "plugin")
+		// Vault-scoped tools additionally require the service API key (X-Service-Key).
+		if vcClient.HasAPIKey() {
+			toolmeta.Register(s, newCheckPluginInstalledTool(), handleCheckPluginInstalled(store, vcClient), "plugin")
+			toolmeta.Register(s, newCheckBillingStatusTool(), handleCheckBillingStatus(store, vcClient), "plugin")
+		}
+	}
 
 	err := protocols.RegisterAll(s, store, pool)
 	if err != nil {

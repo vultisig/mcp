@@ -28,6 +28,7 @@ import (
 	"github.com/vultisig/mcp/internal/tools"
 	tronclient "github.com/vultisig/mcp/internal/tron"
 	"github.com/vultisig/mcp/internal/vault"
+	"github.com/vultisig/mcp/internal/verifier"
 	xrpclient "github.com/vultisig/mcp/internal/xrp"
 )
 
@@ -83,7 +84,13 @@ func main() {
 
 	fbClient := fourbyte.NewClient()
 
-	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, tronClient, gaiaClient, fbClient, dlClient); err != nil {
+	var vcClient *verifier.Client
+	if cfg.VerifierURL != "" {
+		vcClient = verifier.NewClient(cfg.VerifierURL, cfg.VerifierAPIKey)
+		logger.Printf("verifier: %s", cfg.VerifierURL)
+	}
+
+	if err := tools.RegisterAll(s, store, evmPool, cgClient, bcClient, swapSvc, tcClient, mcClient, solClient, jupClient, xrpClient, tronClient, gaiaClient, fbClient, vcClient, dlClient); err != nil {
 		logger.Printf("[WARN] some tools not registered: %v", err)
 	}
 	skills.RegisterMCPResources(s)

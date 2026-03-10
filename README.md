@@ -35,6 +35,8 @@ go build -o mcp-server ./cmd/mcp-server/
 | `SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana JSON-RPC endpoint |
 | `JUPITER_API_URL` | `https://api.jup.ag` | Jupiter DEX aggregator API base URL |
 | `XRP_RPC_URL` | `https://s1.ripple.com:51234` | XRP Ledger JSON-RPC endpoint |
+| `VERIFIER_URL` | `""` | Verifier service base URL — enables plugin management tools when set |
+| `VERIFIER_API_KEY` | `""` | Service-to-service key sent as `X-Service-Key` for user-specific verifier queries |
 
 ## Tools
 
@@ -469,6 +471,43 @@ Query Aave V3 supply APY, variable borrow APY, and reserve configuration for a t
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `asset` | Yes | ERC-20 token contract address (0x-prefixed) |
+
+---
+
+### Plugin Management
+
+These tools are only registered when `VERIFIER_URL` is set. They allow the agent to query plugin installation and billing status and to build plugin configurations.
+
+#### `get_recipe_schema`
+
+Fetch the configuration schema and examples for a plugin. Returns supported resources, parameter constraints, and configuration examples.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `plugin_id` | Yes | Plugin identifier (e.g. `vultisig-dca`) |
+
+#### `suggest_policy`
+
+Validate a plugin configuration and get the resulting policy rules. Call after `get_recipe_schema`.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `plugin_id` | Yes | Plugin identifier |
+| `configuration` | Yes | Plugin configuration as a JSON object string matching the recipe schema |
+
+#### `check_plugin_installed`
+
+Check whether a plugin is installed for the current session's vault. Requires `set_vault_info` first. Requires `VERIFIER_API_KEY` to be configured.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `plugin_id` | Yes | Plugin identifier to check |
+
+#### `check_billing_status`
+
+Check whether the current session's vault has active billing (free trial or billing plugin installed). Requires `set_vault_info` first. Requires `VERIFIER_API_KEY` to be configured.
+
+No parameters.
 
 ---
 
