@@ -8,6 +8,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/vultisig/vultisig-go/address"
+	"github.com/vultisig/vultisig-go/common"
 
 	"github.com/vultisig/mcp/internal/resolve"
 	"github.com/vultisig/mcp/internal/tron"
@@ -57,27 +59,39 @@ func handleBuildTRXSend(store *vault.Store) server.ToolHandlerFunc {
 		}
 
 		explicit := req.GetString("from", "")
+
+		sessionID := resolve.SessionIDFromCtx(ctx)
+		v, ok := store.Get(sessionID)
+		if !ok {
+			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		}
+
+		fromAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Tron)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("derive Tron address: %v", err)), nil
+		}
+
 		if explicit != "" {
 			err = tron.ValidateAddress(explicit)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid sender address: %v", err)), nil
 			}
-		}
-
-		fromAddr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Tron")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			if explicit != fromAddr {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"explicit from address %q does not match vault-derived address %q", explicit, fromAddr)), nil
+			}
 		}
 
 		result := map[string]any{
-			"chain":         "Tron",
-			"action":        "transfer",
-			"signing_mode":  "ecdsa_secp256k1",
-			"owner_address": fromAddr,
-			"to_address":    toAddr,
-			"amount_sun":    amountStr,
-			"amount_trx":    tron.FormatSUN(amount),
-			"ticker":        "TRX",
+			"chain":           "Tron",
+			"action":          "transfer",
+			"signing_mode":    "ecdsa_secp256k1",
+			"signing_pub_key": derivedPubKey,
+			"owner_address":   fromAddr,
+			"to_address":      toAddr,
+			"amount_sun":      amountStr,
+			"amount_trx":      tron.FormatSUN(amount),
+			"ticker":          "TRX",
 		}
 
 		data, err := json.Marshal(result)

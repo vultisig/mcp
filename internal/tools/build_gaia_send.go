@@ -9,6 +9,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/vultisig/vultisig-go/address"
+	"github.com/vultisig/vultisig-go/common"
 
 	"github.com/vultisig/mcp/internal/gaia"
 	"github.com/vultisig/mcp/internal/resolve"
@@ -63,16 +65,26 @@ func handleBuildGaiaSend(store *vault.Store, gaiaClient *gaia.Client) server.Too
 		memo := req.GetString("memo", "")
 		explicit := req.GetString("from", "")
 
+		sessionID := resolve.SessionIDFromCtx(ctx)
+		v, ok := store.Get(sessionID)
+		if !ok {
+			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		}
+
+		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.GaiaChain)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("derive Cosmos address: %v", err)), nil
+		}
+
 		if explicit != "" {
 			err = gaia.ValidateAddress(explicit)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("invalid sender address: %v", err)), nil
 			}
-		}
-
-		senderAddr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Cosmos")
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			if explicit != senderAddr {
+				return mcp.NewToolResultError(fmt.Sprintf(
+					"explicit from address %q does not match vault-derived address %q", explicit, senderAddr)), nil
+			}
 		}
 
 		account, err := gaiaClient.GetAccount(ctx, senderAddr)
@@ -88,18 +100,19 @@ func handleBuildGaiaSend(store *vault.Store, gaiaClient *gaia.Client) server.Too
 		uatomBig := new(big.Int).SetUint64(amountUatom)
 
 		result := map[string]any{
-			"chain":          "Cosmos",
-			"action":         action,
-			"signing_mode":   "ecdsa_secp256k1",
-			"from_address":   senderAddr,
-			"to_address":     toAddr,
-			"amount_uatom":   amountStr,
-			"amount_atom":    gaia.FormatUATOM(uatomBig),
-			"denom":          "uatom",
-			"chain_id":       "cosmoshub-4",
-			"account_number": account.AccountNumber,
-			"sequence":       account.Sequence,
-			"ticker":         "ATOM",
+			"chain":           "Cosmos",
+			"action":          action,
+			"signing_mode":    "ecdsa_secp256k1",
+			"signing_pub_key": derivedPubKey,
+			"from_address":    senderAddr,
+			"to_address":      toAddr,
+			"amount_uatom":    amountStr,
+			"amount_atom":     gaia.FormatUATOM(uatomBig),
+			"denom":           "uatom",
+			"chain_id":        "cosmoshub-4",
+			"account_number":  account.AccountNumber,
+			"sequence":        account.Sequence,
+			"ticker":          "ATOM",
 		}
 
 		if memo != "" {
