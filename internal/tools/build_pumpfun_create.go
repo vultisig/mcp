@@ -95,8 +95,6 @@ func handleBuildPumpfunCreate(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid mint_address: %v", err)), nil
 		}
 
-		explicit := req.GetString("from", "")
-
 		sessionID := resolve.SessionIDFromCtx(ctx)
 		v, ok := store.Get(sessionID)
 		if !ok {
@@ -108,6 +106,7 @@ func handleBuildPumpfunCreate(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("derive Solana address: %v", err)), nil
 		}
 
+		explicit := req.GetString("from", "")
 		if explicit != "" {
 			_, err = solanaclient.ParsePublicKey(explicit)
 			if err != nil {
