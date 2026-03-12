@@ -134,7 +134,7 @@ func (c *Client) GetTokenInfo(ctx context.Context, mintAddr string) (*TokenInfo,
 	}
 
 	marketCapFloat := pricePerTokenLamports * float64(state.TokenTotalSupply)
-	marketCapLamports := uint64(math.Min(marketCapFloat, float64(math.MaxUint64)))
+	marketCapLamports := uint64(math.Min(math.Round(marketCapFloat), float64(math.MaxUint64)))
 
 	graduationProgress := float64(state.RealSolReserves) / float64(graduationThresholdLamports) * 100.0
 	if graduationProgress > 100.0 {
@@ -150,7 +150,7 @@ func (c *Client) GetTokenInfo(ctx context.Context, mintAddr string) (*TokenInfo,
 		RealSolReserves:      state.RealSolReserves,
 		TokenTotalSupply:     state.TokenTotalSupply,
 		Complete:             state.Complete,
-		PricePerTokenSOL:     solanaclient.FormatLamports(uint64(pricePerTokenLamports)),
+		PricePerTokenSOL:     solanaclient.FormatLamports(uint64(math.Round(pricePerTokenLamports))),
 		MarketCapSOL:         solanaclient.FormatLamports(marketCapLamports),
 		GraduationProgress:   graduationProgress,
 	}, nil

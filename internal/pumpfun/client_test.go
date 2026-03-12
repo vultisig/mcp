@@ -48,15 +48,12 @@ func TestDeriveBondingCurvePDA(t *testing.T) {
 	mint1 := solana.MustPublicKeyFromBase58("So11111111111111111111111111111111111111112")
 	mint2 := solana.MustPublicKeyFromBase58("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
 
-	pda1, bump1, err := DeriveBondingCurvePDA(mint1)
+	pda1, _, err := DeriveBondingCurvePDA(mint1)
 	if err != nil {
 		t.Fatalf("derive PDA for mint1: %v", err)
 	}
 	if pda1.IsZero() {
 		t.Fatal("PDA1 is zero")
-	}
-	if bump1 == 0 && pda1.IsZero() {
-		t.Fatal("bump1 is zero with zero PDA")
 	}
 
 	pda1Again, _, err := DeriveBondingCurvePDA(mint1)

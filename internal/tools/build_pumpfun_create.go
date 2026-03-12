@@ -60,6 +60,7 @@ func handleBuildPumpfunCreate(store *vault.Store) server.ToolHandlerFunc {
 		if name == "" {
 			return mcp.NewToolResultError("name must not be empty"), nil
 		}
+		// on-chain limit is byte-based
 		if len(name) > 32 {
 			return mcp.NewToolResultError(fmt.Sprintf("name too long: %d bytes, max 32", len(name))), nil
 		}
@@ -145,8 +146,11 @@ func handleBuildPumpfunCreate(store *vault.Store) server.ToolHandlerFunc {
 		initialBuyStr := req.GetString("initial_buy_amount", "")
 		if initialBuyStr != "" {
 			initialBuy, err := strconv.ParseUint(initialBuyStr, 10, 64)
-			if err != nil || initialBuy == 0 {
-				return mcp.NewToolResultError(fmt.Sprintf("invalid initial_buy_amount: %q", initialBuyStr)), nil
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid initial_buy_amount format: %q", initialBuyStr)), nil
+			}
+			if initialBuy == 0 {
+				return mcp.NewToolResultError(fmt.Sprintf("initial_buy_amount must be greater than zero: %q", initialBuyStr)), nil
 			}
 			result["initial_buy_amount"] = initialBuyStr
 		}
