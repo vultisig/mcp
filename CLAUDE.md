@@ -89,6 +89,7 @@ internal/blockchair/client.go    # Blockchair UTXO chain API client (via Vultisi
 internal/thorchain/client.go     # THORChain node client (fee rates via inbound_addresses)
 internal/solana/client.go        # Solana RPC client wrapper
 internal/jupiter/client.go       # Jupiter DEX aggregator API client
+internal/pumpfun/client.go       # Pump.fun bonding curve reader (on-chain via Solana RPC)
 internal/xrp/client.go           # XRP Ledger JSON-RPC client
 internal/gaia/client.go          # Cosmos Hub (Gaia) REST client
 internal/tools/
@@ -109,6 +110,8 @@ internal/tools/
   build_solana_tx.go             # Return SOL transfer args for client to build and sign
   build_spl_transfer_tx.go       # Return SPL transfer args with derived ATA addresses
   build_solana_swap.go           # Return Solana swap args via Jupiter (quote + params)
+  get_pumpfun_token_info.go      # Query pump.fun bonding curve state (price, reserves, graduation)
+  build_pumpfun_create.go        # Return pump.fun token creation params for client to build tx
   get_xrp_balance.go             # Query native XRP balance
   build_xrp_send.go              # Return XRP Payment args (live fee/sequence fetched)
   get_atom_balance.go            # Query native ATOM balance on Cosmos Hub
