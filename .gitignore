@@ -40,4 +40,4 @@ logs/
 
 .devenv
 config.json
-/mcp-server
+/mcp-server.claude/worktrees/

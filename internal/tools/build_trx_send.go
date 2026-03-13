@@ -22,7 +22,7 @@ func newBuildTRXSendTool() mcp.Tool {
 			"Prepare a native TRX transfer. "+
 				"Returns the transaction parameters (owner, recipient, amount in SUN) "+
 				"needed by the app to build and sign the transaction. "+
-				"If no from address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+				"If no from address is provided, derives it from the vault's ECDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("to",
 			mcp.Description("Recipient TRON address (base58, starts with T)."),
@@ -60,10 +60,9 @@ func handleBuildTRXSend(store *vault.Store) server.ToolHandlerFunc {
 
 		explicit := req.GetString("from", "")
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		v := resolve.ResolveVault(ctx, req, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		fromAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.Tron)

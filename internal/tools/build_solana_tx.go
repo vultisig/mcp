@@ -37,7 +37,7 @@ func newBuildSolanaTxTool() mcp.Tool {
 func handleBuildSolanaTx(store *vault.Store, solClient *solanaclient.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("from", "")
-		fromAddr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Solana")
+		fromAddr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Solana")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
