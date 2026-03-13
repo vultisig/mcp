@@ -36,7 +36,7 @@ func handleGetATOMBalance(store *vault.Store, gaiaClient *gaia.Client) server.To
 			}
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Cosmos")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Cosmos")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

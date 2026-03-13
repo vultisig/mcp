@@ -65,7 +65,7 @@ func handleEVMCheckAllowance(store *vault.Store, pool *evmclient.Pool) server.To
 		if explicit != "" && !common.IsHexAddress(explicit) {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid owner: %s", explicit)), nil
 		}
-		owner, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		owner, err := resolve.EVMAddress(explicit, resolve.ResolveVault(req, ctx, store))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

@@ -41,7 +41,7 @@ func HandleTrades(pmClient *pm.Client, store *vault.Store) server.ToolHandlerFun
 			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s", explicit)), nil
 		}
 
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		addr, err := resolve.EVMAddress(explicit, resolve.ResolveVault(req, ctx, store))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

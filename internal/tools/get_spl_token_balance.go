@@ -38,7 +38,7 @@ func handleGetSPLTokenBalance(store *vault.Store, solClient *solanaclient.Client
 		}
 
 		explicit := req.GetString("address", "")
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Solana")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Solana")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

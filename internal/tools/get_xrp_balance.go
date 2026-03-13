@@ -34,7 +34,7 @@ func handleGetXRPBalance(store *vault.Store, xrpClient *xrpclient.Client) server
 			return mcp.NewToolResultError(fmt.Sprintf("invalid XRP address: %q", explicit)), nil
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Ripple")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Ripple")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

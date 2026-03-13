@@ -123,10 +123,9 @@ func handleCheckPluginInstalled(store *vault.Store, vc *verifier.Client) server.
 			return mcp.NewToolResultError("plugin_id is required"), nil
 		}
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil
+		v := resolve.ResolveVault(req, ctx, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		installed, err := vc.IsPluginInstalled(ctx, v.ECDSAPublicKey, pluginID)
@@ -153,10 +152,9 @@ func newCheckBillingStatusTool() mcp.Tool {
 
 func handleCheckBillingStatus(store *vault.Store, vc *verifier.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil
+		v := resolve.ResolveVault(req, ctx, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		feeStatus, err := vc.GetFeeStatus(ctx, v.ECDSAPublicKey)

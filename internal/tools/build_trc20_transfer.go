@@ -85,7 +85,7 @@ func handleBuildTRC20Transfer(store *vault.Store, tronClient *tron.Client) serve
 			}
 		}
 
-		fromAddr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Tron")
+		fromAddr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Tron")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

@@ -72,10 +72,9 @@ func handleGetAddress(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain %q: %v", chainName, err)), nil
 		}
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set for this session — call set_vault_info first"), nil
+		v := resolve.ResolveVault(req, ctx, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		// Pick the right root public key based on whether the chain uses EdDSA.

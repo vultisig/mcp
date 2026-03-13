@@ -95,10 +95,9 @@ func handleBuildPumpfunCreate(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid mint_address: %v", err)), nil
 		}
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		v := resolve.ResolveVault(req, ctx, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		fromAddr, _, _, err := address.GetAddress(v.EdDSAPublicKey, v.ChainCode, common.Solana)

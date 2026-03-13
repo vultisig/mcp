@@ -64,10 +64,9 @@ func handleBuildXRPSend(store *vault.Store, xrpClient *xrpclient.Client) server.
 		memo := req.GetString("memo", "")
 		explicit := req.GetString("from", "")
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		v := resolve.ResolveVault(req, ctx, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.XRP)

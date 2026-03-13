@@ -36,7 +36,7 @@ func handleGetTronAccountResources(store *vault.Store, tronClient *tron.Client) 
 			}
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Tron")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Tron")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
