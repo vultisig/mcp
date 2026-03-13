@@ -23,7 +23,7 @@ func newBuildLTCSendTool() mcp.Tool {
 			"Return Litecoin transaction arguments for a send or swap. "+
 				"Validates addresses and returns parameters for the client to build the PSBT. "+
 				"For THORChain swaps, provide the memo parameter. "+
-				"Requires set_vault_info to be called first.",
+				"Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("to_address",
 			mcp.Description("Recipient Litecoin address (or THORChain vault address for swaps)"),
@@ -75,7 +75,7 @@ func handleBuildLTCSend(store *vault.Store, _ *blockchair.Client) server.ToolHan
 
 		explicitAddr := req.GetString("address", "")
 
-		v := resolve.ResolveVault(req, ctx, store)
+		v := resolve.ResolveVault(ctx, req, store)
 		if v == nil {
 			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}

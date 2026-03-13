@@ -53,7 +53,7 @@ func HandleOpenOrders(pmClient *pm.Client, authCache *pm.AuthCache, store *vault
 		if explicit != "" && !common.IsHexAddress(explicit) {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s", explicit)), nil
 		}
-		address, err := resolve.EVMAddress(explicit, resolve.ResolveVault(req, ctx, store))
+		address, err := resolve.EVMAddress(explicit, resolve.ResolveVault(ctx, req, store))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

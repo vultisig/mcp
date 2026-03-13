@@ -17,7 +17,7 @@ func newGetSOLBalanceTool() mcp.Tool {
 	return mcp.NewTool("get_sol_balance",
 		mcp.WithDescription(
 			"Query the native SOL balance of a Solana address. "+
-				"If no address is provided, derives it from the vault's EdDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's EdDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("address",
 			mcp.Description("Solana address (base58). Optional if vault info is set."),
@@ -29,7 +29,7 @@ func handleGetSOLBalance(store *vault.Store, solClient *solanaclient.Client) ser
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 
-		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Solana")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Solana")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

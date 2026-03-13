@@ -36,7 +36,7 @@ func VaultInfoFromArgs(req mcp.CallToolRequest) *vault.Info {
 // ResolveVault returns vault info from inline args first, falling back to
 // the session store. This allows both stateless (HTTP) and stateful (stdio)
 // callers to work.
-func ResolveVault(req mcp.CallToolRequest, ctx context.Context, store *vault.Store) *vault.Info {
+func ResolveVault(ctx context.Context, req mcp.CallToolRequest, store *vault.Store) *vault.Info {
 	if vi := VaultInfoFromArgs(req); vi != nil {
 		return vi
 	}

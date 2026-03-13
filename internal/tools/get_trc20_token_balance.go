@@ -19,7 +19,7 @@ func newGetTRC20TokenBalanceTool() mcp.Tool {
 		mcp.WithDescription(
 			"Query a TRC-20 token balance for a TRON address. "+
 				"Returns the token balance, symbol, and decimals. "+
-				"If no address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's ECDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("contract_address",
 			mcp.Description("TRC-20 token contract address (base58, e.g. USDT: TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t)."),
@@ -51,7 +51,7 @@ func handleGetTRC20TokenBalance(store *vault.Store, tronClient *tron.Client) ser
 			}
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Tron")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Tron")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

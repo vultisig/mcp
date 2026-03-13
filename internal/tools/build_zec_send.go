@@ -22,7 +22,7 @@ func newBuildZECSendTool() mcp.Tool {
 			"Return Zcash transaction arguments for a send or swap. "+
 				"Validates addresses and returns parameters for the client to build the transaction. "+
 				"Fee is computed automatically using ZIP-317 on the client side. "+
-				"Requires set_vault_info to be called first.",
+				"Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("to_address",
 			mcp.Description("Recipient Zcash transparent address (t1... or t3...)"),
@@ -64,7 +64,7 @@ func handleBuildZECSend(store *vault.Store, _ *blockchair.Client) server.ToolHan
 
 		explicitAddr := req.GetString("address", "")
 
-		v := resolve.ResolveVault(req, ctx, store)
+		v := resolve.ResolveVault(ctx, req, store)
 		if v == nil {
 			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}

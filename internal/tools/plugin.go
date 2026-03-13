@@ -107,7 +107,7 @@ func newCheckPluginInstalledTool() mcp.Tool {
 	return mcp.NewTool("check_plugin_installed",
 		mcp.WithDescription(
 			"Check whether a plugin is installed for the current session's vault. "+
-				"Requires set_vault_info to have been called first.",
+				"Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("plugin_id",
 			mcp.Description("Plugin identifier to check"),
@@ -123,9 +123,9 @@ func handleCheckPluginInstalled(store *vault.Store, vc *verifier.Client) server.
 			return mcp.NewToolResultError("plugin_id is required"), nil
 		}
 
-		v := resolve.ResolveVault(req, ctx, store)
-		if v == nil {
-			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
+		v := resolve.ResolveVault(ctx, req, store)
+		if v == nil || v.ECDSAPublicKey == "" {
+			return mcp.NewToolResultError("missing ecdsa_public_key — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		installed, err := vc.IsPluginInstalled(ctx, v.ECDSAPublicKey, pluginID)
@@ -145,16 +145,16 @@ func newCheckBillingStatusTool() mcp.Tool {
 	return mcp.NewTool("check_billing_status",
 		mcp.WithDescription(
 			"Check whether the current session's vault has active billing (free trial or billing plugin installed). "+
-				"Requires set_vault_info to have been called first.",
+				"Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 	)
 }
 
 func handleCheckBillingStatus(store *vault.Store, vc *verifier.Client) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		v := resolve.ResolveVault(req, ctx, store)
-		if v == nil {
-			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
+		v := resolve.ResolveVault(ctx, req, store)
+		if v == nil || v.ECDSAPublicKey == "" {
+			return mcp.NewToolResultError("missing ecdsa_public_key — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		feeStatus, err := vc.GetFeeStatus(ctx, v.ECDSAPublicKey)

@@ -282,7 +282,7 @@ func handleGetBalances(store *vault.Store, aaveClient *aavev3sdk.Client) server.
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		explicit := req.GetString("address", "")
 
-		addr, err := resolve.EVMAddress(explicit, resolve.ResolveVault(req, ctx, store))
+		addr, err := resolve.EVMAddress(explicit, resolve.ResolveVault(ctx, req, store))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -393,7 +393,7 @@ func extractTxParams(ctx context.Context, req mcp.CallToolRequest, store *vault.
 	}
 
 	explicit := req.GetString("address", "")
-	addr, err = resolve.EVMAddress(explicit, resolve.ResolveVault(req, ctx, store))
+	addr, err = resolve.EVMAddress(explicit, resolve.ResolveVault(ctx, req, store))
 	if err != nil {
 		return "", "", "", err
 	}

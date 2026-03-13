@@ -18,7 +18,7 @@ func newGetSPLTokenBalanceTool() mcp.Tool {
 		mcp.WithDescription(
 			"Query the SPL token balance for a Solana address. "+
 				"Auto-detects token program (SPL vs Token-2022) and derives the associated token account. "+
-				"If no address is provided, derives it from the vault's EdDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's EdDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("mint",
 			mcp.Description("Token mint address (base58)."),
@@ -38,7 +38,7 @@ func handleGetSPLTokenBalance(store *vault.Store, solClient *solanaclient.Client
 		}
 
 		explicit := req.GetString("address", "")
-		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(req, ctx, store), "Solana")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Solana")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

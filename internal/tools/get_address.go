@@ -51,7 +51,7 @@ var supportedChains = []string{
 
 func newGetAddressTool() mcp.Tool {
 	return mcp.NewTool("get_address",
-		mcp.WithDescription("Derive the address for a given blockchain network from the vault's key material. Requires set_vault_info to be called first."),
+		mcp.WithDescription("Derive the address for a given blockchain network from the vault's key material. Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state."),
 		mcp.WithString("chain",
 			mcp.Description("Blockchain network name"),
 			mcp.Required(),
@@ -72,7 +72,7 @@ func handleGetAddress(store *vault.Store) server.ToolHandlerFunc {
 			return mcp.NewToolResultError(fmt.Sprintf("unsupported chain %q: %v", chainName, err)), nil
 		}
 
-		v := resolve.ResolveVault(req, ctx, store)
+		v := resolve.ResolveVault(ctx, req, store)
 		if v == nil {
 			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
