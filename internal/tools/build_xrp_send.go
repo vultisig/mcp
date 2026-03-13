@@ -23,7 +23,7 @@ func newBuildXRPSendTool() mcp.Tool {
 			"Return XRP Ledger Payment transaction arguments for the client to build and sign. "+
 				"Fetches sequence number, current ledger, and base fee for the client's reference. "+
 				"For THORChain cross-chain swaps, provide the memo parameter. "+
-				"Requires set_vault_info to be called first.",
+				"Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("to",
 			mcp.Description("Recipient XRP address (or THORChain vault address for swaps)"),
@@ -64,10 +64,9 @@ func handleBuildXRPSend(store *vault.Store, xrpClient *xrpclient.Client) server.
 		memo := req.GetString("memo", "")
 		explicit := req.GetString("from", "")
 
-		sessionID := resolve.SessionIDFromCtx(ctx)
-		v, ok := store.Get(sessionID)
-		if !ok {
-			return mcp.NewToolResultError("no vault info set — call set_vault_info first"), nil
+		v := resolve.ResolveVault(ctx, req, store)
+		if v == nil {
+			return mcp.NewToolResultError("no vault info available — pass vault keys inline or call set_vault_info"), nil
 		}
 
 		senderAddr, derivedPubKey, _, err := address.GetAddress(v.ECDSAPublicKey, v.ChainCode, common.XRP)

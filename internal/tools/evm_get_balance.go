@@ -17,7 +17,7 @@ func newEVMGetBalanceTool() mcp.Tool {
 	return mcp.NewTool("evm_get_balance",
 		mcp.WithDescription(
 			"Query the native coin balance of an address on any EVM chain. "+
-				"If no address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's ECDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("chain",
 			mcp.Description("EVM chain name. One of: "+chainEnumDesc()),
@@ -42,7 +42,7 @@ func handleEVMGetBalance(store *vault.Store, pool *evmclient.Pool) server.ToolHa
 		if explicit != "" && !common.IsHexAddress(explicit) {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid address: %s", explicit)), nil
 		}
-		addr, err := resolve.EVMAddress(explicit, resolve.SessionIDFromCtx(ctx), store)
+		addr, err := resolve.EVMAddress(explicit, resolve.ResolveVault(ctx, req, store))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

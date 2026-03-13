@@ -18,7 +18,7 @@ func newGetATOMBalanceTool() mcp.Tool {
 	return mcp.NewTool("get_atom_balance",
 		mcp.WithDescription(
 			"Query the native ATOM balance of a Cosmos Hub (Gaia) address. "+
-				"If no address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's ECDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("address",
 			mcp.Description("Cosmos address (bech32, cosmos1...). Optional if vault info is set."),
@@ -36,7 +36,7 @@ func handleGetATOMBalance(store *vault.Store, gaiaClient *gaia.Client) server.To
 			}
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Cosmos")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Cosmos")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

@@ -19,7 +19,7 @@ func newGetXRPBalanceTool() mcp.Tool {
 	return mcp.NewTool("get_xrp_balance",
 		mcp.WithDescription(
 			"Query the native XRP balance of an XRP Ledger address. "+
-				"If no address is provided, derives it from the vault's ECDSA public key (requires set_vault_info first).",
+				"If no address is provided, derives it from the vault's ECDSA public key Accepts inline vault keys (ecdsa_public_key, eddsa_public_key, chain_code) or falls back to set_vault_info session state.",
 		),
 		mcp.WithString("address",
 			mcp.Description("XRP address. Optional if vault info is set."),
@@ -34,7 +34,7 @@ func handleGetXRPBalance(store *vault.Store, xrpClient *xrpclient.Client) server
 			return mcp.NewToolResultError(fmt.Sprintf("invalid XRP address: %q", explicit)), nil
 		}
 
-		addr, err := resolve.ChainAddress(explicit, resolve.SessionIDFromCtx(ctx), store, "Ripple")
+		addr, err := resolve.ChainAddress(explicit, resolve.ResolveVault(ctx, req, store), "Ripple")
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
