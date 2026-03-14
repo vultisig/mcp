@@ -1,0 +1,247 @@
+name: Integration Test
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: integration-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: vultisig
+          POSTGRES_PASSWORD: vultisig
+          POSTGRES_DB: vultisig-agent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vultisig -d vultisig-agent"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_DSN: postgres://vultisig:vultisig@localhost:5432/vultisig-agent?sslmode=disable
+      REDIS_URI: redis://localhost:6379
+      JWT_SECRET: integration-test-secret-key-not-for-prod
+      AI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AI_MODEL: anthropic/claude-sonnet-4-20250514
+      AI_SUMMARY_MODEL: anthropic/claude-haiku-4-5-20251001
+      MCP_SERVER_URL: http://localhost:8888
+      VERIFIER_URL: ""
+      SERVER_PORT: "9998"
+
+    steps:
+      # ── Checkout repos ──
+      - name: Checkout MCP (PR branch)
+        uses: actions/checkout@v4
+        with:
+          path: mcp
+
+      - name: Checkout agent-backend
+        uses: actions/checkout@v4
+        with:
+          repository: vultisig/agent-backend
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: agent-backend
+
+      # ── Setup Go ──
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+          cache: true
+          cache-dependency-path: |
+            mcp/go.sum
+            agent-backend/go.sum
+
+      # ── Build MCP server from PR branch ──
+      - name: Build MCP server
+        working-directory: mcp
+        run: CGO_ENABLED=0 go build -o ../mcp-server ./cmd/mcp-server/
+
+      # ── Start MCP server ──
+      - name: Start MCP server
+        run: |
+          ./mcp-server -http :8888 > /tmp/mcp-server.log 2>&1 &
+          echo "MCP_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8888/skills > /dev/null 2>&1; then
+              echo "MCP server ready after ${i}s"
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "::error::MCP server failed to start"
+              cat /tmp/mcp-server.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+      # ── Verify skills are served ──
+      - name: Verify MCP skills listing
+        run: |
+          SKILLS=$(curl -sf http://localhost:8888/skills)
+          echo "Skills: $SKILLS"
+          SKILL_COUNT=$(echo "$SKILLS" | jq length)
+          echo "Skill count: $SKILL_COUNT"
+          if [ "$SKILL_COUNT" -lt 1 ]; then
+            echo "::error::No skills found in MCP listing"
+            exit 1
+          fi
+
+      # ── Run agent-backend DB migrations ──
+      - name: Run database migrations
+        working-directory: agent-backend
+        run: |
+          go run -tags 'postgres' github.com/pressly/goose/v3/cmd/goose@latest \
+            -dir internal/storage/postgres/migrations \
+            postgres "$DATABASE_DSN" up
+
+      # ── Build and start agent-backend ──
+      - name: Build agent-backend
+        working-directory: agent-backend
+        run: go build -o ../agent-server ./cmd/server/
+
+      - name: Start agent-backend
+        run: |
+          ./agent-server > /tmp/agent-backend.log 2>&1 &
+          echo "AGENT_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9998/healthz > /dev/null 2>&1; then
+              echo "Agent-backend ready after ${i}s"
+              break
+            fi
+            if [ "$i" = "30" ]; then
+              echo "::error::Agent-backend failed to start"
+              cat /tmp/agent-backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+      # ── Mint a test JWT (bypass vault ECDSA auth) ──
+      - name: Mint test JWT
+        working-directory: agent-backend
+        run: |
+          mkdir -p cmd/mint-jwt
+          cat > cmd/mint-jwt/main.go <<'GOEOF'
+          package main
+
+          import (
+            "fmt"
+            "time"
+
+            "github.com/vultisig/agent-backend/internal/auth"
+          )
+
+          func main() {
+            secret := []byte("integration-test-secret-key-not-for-prod")
+            token, err := auth.IssueToken("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", secret, 1*time.Hour)
+            if err != nil {
+              panic(err)
+            }
+            fmt.Print(token)
+          }
+          GOEOF
+          TOKEN=$(go run ./cmd/mint-jwt/)
+          echo "TEST_JWT=$TOKEN" >> "$GITHUB_ENV"
+
+      # ── Create conversation and send test message ──
+      - name: Create test conversation
+        run: |
+          CONV_RESP=$(curl -sf -X POST http://localhost:9998/agent/conversations \
+            -H "Authorization: Bearer $TEST_JWT" \
+            -H 'Content-Type: application/json' \
+            -d '{"public_key":"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}')
+          echo "Conversation: $CONV_RESP"
+          CONV_ID=$(echo "$CONV_RESP" | jq -r '.id')
+          if [ -z "$CONV_ID" ] || [ "$CONV_ID" = "null" ]; then
+            echo "::error::Failed to create conversation"
+            exit 1
+          fi
+          echo "CONV_ID=$CONV_ID" >> "$GITHUB_ENV"
+
+      - name: Send test message
+        run: |
+          # Determine what skills were added/changed in this PR
+          SKILL_LIST=$(curl -sf http://localhost:8888/skills | jq -r '.[].name' | tr '\n' ', ')
+          echo "Available skills: $SKILL_LIST"
+
+          # Send a generic question that the agent should route through its skills
+          RESP=$(curl -sf -X POST "http://localhost:9998/agent/conversations/${CONV_ID}/messages" \
+            -H "Authorization: Bearer $TEST_JWT" \
+            -H 'Content-Type: application/json' \
+            --max-time 120 \
+            -d "{
+              \"public_key\": \"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",
+              \"content\": \"What skills and capabilities do you have? List all of them.\",
+              \"context\": {}
+            }")
+          echo "$RESP" > /tmp/agent-response.json
+          echo "Response message: $(echo "$RESP" | jq -r '.message.content' | head -c 500)"
+
+      # ── Validate with Claude Code ──
+      - name: Validate agent integration
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          direct_prompt: |
+            You are validating an integration test for the Vultisig MCP + Agent stack.
+
+            The MCP server was built from the PR branch and started successfully.
+            The agent-backend connected to it and discovered its tools and skills.
+            A test message was sent asking the agent about its capabilities.
+
+            Files to check:
+            - /tmp/agent-response.json — the agent's response
+            - /tmp/mcp-server.log — MCP server logs
+            - /tmp/agent-backend.log — agent-backend logs
+
+            Validation criteria:
+            1. The agent-response.json contains a valid response with a non-empty message
+            2. The agent-backend.log shows MCP tools and skills were discovered
+            3. No critical errors in either log file
+
+            Read the files and output your verdict as:
+            INTEGRATION_TEST: PASS — if all criteria are met
+            INTEGRATION_TEST: FAIL — if any criteria fails
+
+            Include a brief explanation.
+          allowed_tools: "Bash(cat:*),Bash(jq:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+
+      # ── Cleanup ──
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== MCP Server Log ==="
+          cat /tmp/mcp-server.log || true
+          echo "=== Agent Backend Log ==="
+          cat /tmp/agent-backend.log || true
+          echo "=== Agent Response ==="
+          cat /tmp/agent-response.json 2>/dev/null || echo "No response file"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          [ -n "$AGENT_PID" ] && kill "$AGENT_PID" 2>/dev/null || true
+          [ -n "$MCP_PID" ] && kill "$MCP_PID" 2>/dev/null || true
