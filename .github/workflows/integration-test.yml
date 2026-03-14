@@ -166,7 +166,36 @@ jobs:
           TOKEN=$(go run ./cmd/mint-jwt/)
           echo "TEST_JWT=$TOKEN" >> "$GITHUB_ENV"
 
-      # ── Create conversation and send test message ──
+      # ── Verify agent-backend discovered MCP tools and skills ──
+      - name: Verify MCP integration with agent-backend
+        run: |
+          echo "=== Agent Backend Logs ==="
+          cat /tmp/agent-backend.log
+
+          # Check that tools were discovered
+          TOOL_COUNT=$(grep -o '"mcp_tool_count":[0-9]*' /tmp/agent-backend.log | head -1 | grep -o '[0-9]*')
+          echo "MCP tools discovered: $TOOL_COUNT"
+          if [ -z "$TOOL_COUNT" ] || [ "$TOOL_COUNT" -lt 1 ]; then
+            echo "::error::Agent-backend did not discover any MCP tools"
+            exit 1
+          fi
+
+          # Check that skills were discovered
+          SKILL_COUNT=$(grep -o '"skill_count":[0-9]*' /tmp/agent-backend.log | head -1 | grep -o '[0-9]*')
+          echo "MCP skills discovered: $SKILL_COUNT"
+          if [ -z "$SKILL_COUNT" ] || [ "$SKILL_COUNT" -lt 1 ]; then
+            echo "::error::Agent-backend did not discover any MCP skills"
+            exit 1
+          fi
+
+          # Verify our new skill is in the list
+          if grep -q 'blur-sign-in' /tmp/agent-backend.log; then
+            echo "✓ blur-sign-in skill discovered by agent-backend"
+          else
+            echo "::warning::blur-sign-in skill not found in agent-backend logs"
+          fi
+
+      # ── Create conversation (tests JWT + DB) ──
       - name: Create test conversation
         run: |
           CONV_RESP=$(curl -sf -X POST http://localhost:9998/agent/conversations \
@@ -181,14 +210,14 @@ jobs:
           fi
           echo "CONV_ID=$CONV_ID" >> "$GITHUB_ENV"
 
+      # ── Send test message (requires AI API key) ──
       - name: Send test message
+        if: env.AI_API_KEY != ''
         run: |
-          # Determine what skills were added/changed in this PR
           SKILL_LIST=$(curl -sf http://localhost:8888/skills | jq -r '.[].name' | tr '\n' ', ')
           echo "Available skills: $SKILL_LIST"
 
-          # Send a generic question that the agent should route through its skills
-          RESP=$(curl -sf -X POST "http://localhost:9998/agent/conversations/${CONV_ID}/messages" \
+          RESP=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:9998/agent/conversations/${CONV_ID}/messages" \
             -H "Authorization: Bearer $TEST_JWT" \
             -H 'Content-Type: application/json' \
             --max-time 120 \
@@ -197,11 +226,23 @@ jobs:
               \"content\": \"What skills and capabilities do you have? List all of them.\",
               \"context\": {}
             }")
-          echo "$RESP" > /tmp/agent-response.json
-          echo "Response message: $(echo "$RESP" | jq -r '.message.content' | head -c 500)"
+          HTTP_CODE=$(echo "$RESP" | tail -1)
+          BODY=$(echo "$RESP" | sed '$d')
+          echo "$BODY" > /tmp/agent-response.json
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response: $(echo "$BODY" | jq -r '.message.content // .error // "no content"' 2>/dev/null | head -c 500)"
+          if [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::error::Agent message failed with HTTP $HTTP_CODE"
+            exit 1
+          fi
 
-      # ── Validate with Claude Code ──
+      - name: Skip AI test (no API key)
+        if: env.AI_API_KEY == ''
+        run: echo "::notice::Skipping AI message test — OPENROUTER_API_KEY secret not configured"
+
+      # ── Validate with Claude Code (requires Anthropic key) ──
       - name: Validate agent integration
+        if: env.AI_API_KEY != '' && secrets.ANTHROPIC_API_KEY != ''
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
