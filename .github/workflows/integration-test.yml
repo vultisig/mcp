@@ -182,11 +182,11 @@ jobs:
       # ── Setup vultisig-sdk CLI ──
       - name: Install vultisig-sdk dependencies
         working-directory: vultisig-sdk
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Build vultisig-sdk
         working-directory: vultisig-sdk
-        run: npx turbo build
+        run: yarn turbo build
 
       # ── Setup test vault ──
       - name: Setup test vault
