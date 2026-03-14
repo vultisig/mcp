@@ -12,6 +12,9 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
 
     services:
       postgres:
@@ -246,7 +249,7 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          direct_prompt: |
+          prompt: |
             You are validating an integration test for the Vultisig MCP + Agent stack.
 
             The MCP server was built from the PR branch and started successfully.
@@ -268,7 +271,7 @@ jobs:
             INTEGRATION_TEST: FAIL — if any criteria fails
 
             Include a brief explanation.
-          allowed_tools: "Bash(cat:*),Bash(jq:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"
+          claude_args: '--allowedTools "Bash(cat:*),Bash(jq:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"'
 
       # ── Cleanup ──
       - name: Show logs on failure
