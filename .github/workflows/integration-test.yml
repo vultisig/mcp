@@ -213,30 +213,43 @@ jobs:
           VAULT_PASSWORD: ${{ secrets.TEST_VAULT_PASSWORD }}
         run: |
           opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
-          You are running an integration test for the Vultisig agent stack.
+          You are running an integration test for the Vultisig agent stack in a CI environment.
 
-          The agent-backend is running at http://localhost:9998 and the MCP server at http://localhost:8888.
-          A test vault named 'ci_test' is configured in ~/.vultisig/.
+          Environment setup (already done for you):
+          - agent-backend is running at http://localhost:9998
+          - MCP server is running at http://localhost:8888
+          - Test vault 'ci_test' is in ~/.vultisig/
+          - The VAULT_PASSWORD environment variable is already set with the vault password
+          - The vultisig CLI is built and available via: npx tsx clients/cli/src/index.ts
+          - You are in the vultisig-sdk directory
 
-          Your task:
-          1. Start the vultisig CLI agent in pipe mode by running:
+          Your task: Use the vultisig CLI to send a message to the agent and verify it responds about the Blur Sign-In skill.
+
+          Write a bash script that does the following:
+          1. Spawns the CLI in pipe mode as a background process:
              npx tsx clients/cli/src/index.ts agent --vault ci_test --backend-url http://localhost:9998 --via-agent
 
-          2. The CLI will output NDJSON lines. Wait for a {"type":"ready"} event.
+          2. The CLI communicates via NDJSON (one JSON object per line) on stdin/stdout.
+             - It will emit {"type":"ready",...} when initialized
+             - You send messages by writing JSON to its stdin: {"type":"message","content":"your question here"}
+             - It responds with multiple NDJSON events and ends with {"type":"done"}
 
-          3. Then write this JSON line to stdin:
-             {"type":"message","content":"What is the Blur Sign-In skill? Describe what it does."}
+          3. Wait for the "ready" event (up to 60 seconds)
 
-          4. Read the NDJSON output until you see {"type":"done"}.
+          4. Send this message: {"type":"message","content":"What is the Blur Sign-In skill? Describe what it does."}
 
-          5. Check the assistant's response mentions blur, EIP-712, and wallet authentication.
+          5. Collect output until "done" event (up to 120 seconds)
 
-          6. Print your verdict:
-             INTEGRATION_TEST: PASS — if the agent responded with relevant information about Blur Sign-In
+          6. Check that the response mentions blur and authentication/signing
+
+          7. Print your verdict as exactly one of:
+             INTEGRATION_TEST: PASS — if the agent responded with relevant Blur Sign-In information
              INTEGRATION_TEST: FAIL — with explanation if something went wrong
 
-          Important: The CLI uses NDJSON (one JSON object per line) on stdin/stdout.
-          Use a timeout of 120 seconds for the agent response.
+          Important notes:
+          - The VAULT_PASSWORD env var is already set, the CLI will read it automatically — do NOT prompt for a password
+          - Do NOT use interactive commands, everything must be non-interactive
+          - Use timeout commands to avoid hanging
           PROMPT
           )" 2>&1 | tee /tmp/opencode-output.log
 
@@ -248,7 +261,6 @@ jobs:
             exit 1
           else
             echo "::warning::Could not determine test result from opencode output"
-            # Don't fail — the infrastructure tests above already validated the stack
           fi
 
       # ── Cleanup ──
