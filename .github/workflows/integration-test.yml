@@ -11,7 +11,7 @@ concurrency:
 jobs:
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -173,10 +173,10 @@ jobs:
             exit 1
           fi
 
-          if grep -q 'blur-sign-in' /tmp/agent-backend.log; then
-            echo "✓ blur-sign-in skill discovered by agent-backend"
+          if grep -q 'weth-wrap-unwrap' /tmp/agent-backend.log; then
+            echo "✓ weth-wrap-unwrap skill discovered by agent-backend"
           else
-            echo "::warning::blur-sign-in skill not found in agent-backend logs"
+            echo "::warning::weth-wrap-unwrap skill not found in agent-backend logs"
           fi
 
       # ── Setup vultisig-sdk CLI ──
@@ -217,6 +217,31 @@ jobs:
           }
           EOF
 
+      # ── Discover what changed in this PR ──
+      - name: Discover PR changes
+        working-directory: mcp
+        run: |
+          # Get the diff of new/changed skills and tools vs main
+          git fetch origin main --depth=50 2>/dev/null || true
+          {
+            echo "=== New/changed skill files ==="
+            git diff origin/main...HEAD --name-status -- 'internal/skills/files/*.md'
+            echo ""
+            echo "=== New/changed tool files ==="
+            git diff origin/main...HEAD --name-status -- 'internal/tools/*.go' 'internal/protocols/**/*.go'
+            echo ""
+            echo "=== Skill contents (new/modified only) ==="
+            for f in $(git diff origin/main...HEAD --name-only --diff-filter=AM -- 'internal/skills/files/*.md'); do
+              echo "--- $f ---"
+              cat "$f"
+              echo ""
+            done
+            echo ""
+            echo "=== Available MCP skills ==="
+            curl -sf http://localhost:8888/skills | jq -r '.[].name'
+          } > /tmp/pr-changes.txt
+          cat /tmp/pr-changes.txt
+
       # ── Run integration test via opencode ──
       - name: Run integration test with opencode
         working-directory: vultisig-sdk
@@ -225,35 +250,69 @@ jobs:
         run: |
           export VAULT_PASSWORD
           opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
-          You are an integration test agent. Your job is to chat with a Vultisig AI agent through the vultisig CLI and verify the agent knows about the Blur Sign-In skill.
+          You are an integration test agent. Your job is to exercise new MCP skills and tools introduced in a pull request by chatting with a Vultisig AI agent through the CLI.
+
+          ## Environment
 
           The full stack is already running:
-          - MCP server at localhost:8888
-          - agent-backend at localhost:9998
-          - Test vault 'ci_test' is configured in ~/.vultisig/
+          - MCP server at localhost:8888 (skills/tools)
+          - agent-backend at localhost:9998 (AI agent)
+          - Test vault "ci_test" is configured in ~/.vultisig/
           - The vault password is in the $VAULT_PASSWORD environment variable
+          - The test vault has a small amount of ETH on Ethereum mainnet
+
+          ## Step 1: Discover what to test
+
+          Read the file /tmp/pr-changes.txt — it contains the git diff showing which skills and tools were added or modified in this PR, plus the full content of any new skill files.
+
+          From this, identify:
+          - New skills (markdown files in internal/skills/files/)
+          - New or changed tools (Go files in internal/tools/)
+          - What actions/workflows these skills teach
+
+          Design a concrete integration test that exercises the new functionality end-to-end. For example:
+          - If a new skill teaches how to wrap ETH, ask the agent to wrap a tiny amount (0.0001 ETH)
+          - If a new tool queries balances, ask the agent to check balances
+          - If a skill involves contract interaction, ask the agent to perform it
+
+          ## Step 2: Chat with the agent
 
           Start the vultisig CLI agent in pipe mode:
 
               npx tsx clients/cli/src/index.ts agent --vault ci_test --password "$VAULT_PASSWORD" --backend-url http://localhost:9998 --via-agent
 
-          This spawns a process that communicates via NDJSON (one JSON object per line) on stdin/stdout:
-          - Wait for a line containing "type":"ready" — the CLI is initialized
-          - Write a JSON message to its stdin: {"type":"message","content":"What is the Blur Sign-In skill? Explain how it works."}
-          - Read lines until you see "type":"done" — the agent's turn is complete
-          - Lines with "type":"text_delta" contain the agent's streaming response in the "delta" field
-          - Lines with "type":"assistant" contain the full response in "content"
+          This spawns a long-running process communicating via NDJSON on stdin/stdout:
+          - Wait for a line containing "type":"ready" (60s timeout)
+          - Send messages: {"type":"message","content":"your message here"}
+          - Read lines until "type":"done" for each turn
+          - "type":"text_delta" has streaming text in "delta"
+          - "type":"assistant" has full response in "content"
+          - "type":"tool_result" has tool call results
 
-          After the agent responds, evaluate:
-          - Does the response mention Blur, EIP-712, and wallet authentication/signing?
-          - If yes: print INTEGRATION_TEST: PASS
-          - If unclear, send a follow-up message asking specifically about blur-sign-in
-          - If the agent fails or errors out: print INTEGRATION_TEST: FAIL with explanation
+          Handle these automatically:
+          - "type":"error" with "message":"PASSWORD_REQUIRED" → send {"type":"password","password":"$VAULT_PASSWORD_PLACEHOLDER"}
+            (use the actual value of $VAULT_PASSWORD from the environment)
+          - "type":"error" with message starting "CONFIRMATION_REQUIRED" → send {"type":"confirm","confirmed":true}
+
+          ## Step 3: Evaluate
+
+          The test passes if the agent successfully executes the workflow from the new skill:
+          - Tool calls match the expected flow (e.g., abi_encode → evm_tx_info → build_evm_tx for EVM skills)
+          - Transactions are signed and broadcast (tx_hash returned)
+          - No unrecoverable errors
+
+          Allow up to 10 turns of back-and-forth. If the agent asks questions, approve and tell it to proceed.
+
+          ## Output
+
+          Print exactly one of:
+          - INTEGRATION_TEST: PASS — with a brief summary of what was tested and the tx hash if any
+          - INTEGRATION_TEST: FAIL — with explanation of what went wrong
 
           Important:
-          - Always pass --password "$VAULT_PASSWORD" to the CLI
-          - Use timeouts to avoid hanging (60s for ready, 120s for response)
-          - The CLI is a long-running process — keep it alive between messages
+          - Use small amounts (0.0001 ETH or less) to minimize cost
+          - Use timeouts: 60s for ready, 3 min per agent turn, 10 min total
+          - The CLI process must stay alive between messages
           PROMPT
           )" 2>&1 | tee /tmp/opencode-output.log
 
