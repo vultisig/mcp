@@ -242,88 +242,70 @@ jobs:
           } > /tmp/pr-changes.txt
           cat /tmp/pr-changes.txt
 
-      # ── Run integration test via opencode ──
-      - name: Run integration test with opencode
+      # ── Formulate test message via opencode ──
+      - name: Formulate test via opencode
+        env:
+          VAULT_PASSWORD: ${{ secrets.TEST_VAULT_PASSWORD }}
+        run: |
+          opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
+          Read /tmp/pr-changes.txt which contains the git diff of new/changed MCP skills and tools.
+
+          Based on the changes, write a single natural-language message that a user would send to a crypto wallet AI agent to exercise the new functionality. The message should:
+          - Be a concrete, actionable request (e.g., "Wrap 0.0001 ETH to WETH on Ethereum using the WETH contract")
+          - Use small amounts (0.0001 ETH or less) to minimize cost
+          - Reference specific contract addresses from the skill if applicable
+          - Be self-contained — the agent should be able to execute it without follow-up
+
+          Write ONLY the message to a file at /tmp/test-message.txt — no explanation, no quotes, just the raw message text. If no testable skills/tools were changed, write "Check my ETH balance on Ethereum" as a fallback.
+          PROMPT
+          )" 2>&1 | tee /tmp/opencode-formulate.log
+
+          echo "=== Test message ==="
+          cat /tmp/test-message.txt
+
+      # ── Run integration test with pre-built harness ──
+      - name: Run integration test
         working-directory: vultisig-sdk
         env:
           VAULT_PASSWORD: ${{ secrets.TEST_VAULT_PASSWORD }}
         run: |
-          export VAULT_PASSWORD
-          opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
-          You are an integration test agent. Your job is to exercise new MCP skills and tools introduced in a pull request by chatting with a Vultisig AI agent through the CLI.
+          TEST_MSG=$(cat /tmp/test-message.txt)
+          echo "Test message: $TEST_MSG"
 
-          ## Environment
+          node ../mcp/testdata/agent-test-runner.mjs \
+            --message "$TEST_MSG" \
+            --vault ci_test \
+            --password "$VAULT_PASSWORD" \
+            --backend-url http://localhost:9998 \
+            --sdk-dir "$(pwd)" \
+            --timeout 600 \
+            --max-turns 10 \
+            > /tmp/test-result.json 2>/tmp/test-runner.log \
+            && EXIT_CODE=0 || EXIT_CODE=$?
+          echo "=== Test Runner Log ==="
+          cat /tmp/test-runner.log
+          echo ""
+          echo "=== Test Result ==="
+          cat /tmp/test-result.json
 
-          The full stack is already running:
-          - MCP server at localhost:8888 (skills/tools)
-          - agent-backend at localhost:9998 (AI agent)
-          - Test vault "ci_test" is configured in ~/.vultisig/
-          - The vault password is in the $VAULT_PASSWORD environment variable
-          - The test vault has a small amount of ETH on Ethereum mainnet
+          # Evaluate result
+          SUCCESS=$(jq -r '.success' /tmp/test-result.json)
+          TX_HASHES=$(jq -r '.tx_hashes | join(", ")' /tmp/test-result.json)
+          TOOLS=$(jq -r '.tool_calls | join(" → ")' /tmp/test-result.json)
 
-          ## Step 1: Discover what to test
+          echo "Tools used: $TOOLS"
+          echo "TX hashes: $TX_HASHES"
 
-          Read the file /tmp/pr-changes.txt — it contains the git diff showing which skills and tools were added or modified in this PR, plus the full content of any new skill files.
-
-          From this, identify:
-          - New skills (markdown files in internal/skills/files/)
-          - New or changed tools (Go files in internal/tools/)
-          - What actions/workflows these skills teach
-
-          Design a concrete integration test that exercises the new functionality end-to-end. For example:
-          - If a new skill teaches how to wrap ETH, ask the agent to wrap a tiny amount (0.0001 ETH)
-          - If a new tool queries balances, ask the agent to check balances
-          - If a skill involves contract interaction, ask the agent to perform it
-
-          ## Step 2: Chat with the agent
-
-          Start the vultisig CLI agent in pipe mode:
-
-              npx tsx clients/cli/src/index.ts agent --vault ci_test --password "$VAULT_PASSWORD" --backend-url http://localhost:9998 --via-agent
-
-          This spawns a long-running process communicating via NDJSON on stdin/stdout:
-          - Wait for a line containing "type":"ready" (60s timeout)
-          - Send messages: {"type":"message","content":"your message here"}
-          - Read lines until "type":"done" for each turn
-          - "type":"text_delta" has streaming text in "delta"
-          - "type":"assistant" has full response in "content"
-          - "type":"tool_result" has tool call results
-
-          Handle these automatically:
-          - "type":"error" with "message":"PASSWORD_REQUIRED" → send {"type":"password","password":"$VAULT_PASSWORD_PLACEHOLDER"}
-            (use the actual value of $VAULT_PASSWORD from the environment)
-          - "type":"error" with message starting "CONFIRMATION_REQUIRED" → send {"type":"confirm","confirmed":true}
-
-          ## Step 3: Evaluate
-
-          The test passes if the agent successfully executes the workflow from the new skill:
-          - Tool calls match the expected flow (e.g., abi_encode → evm_tx_info → build_evm_tx for EVM skills)
-          - Transactions are signed and broadcast (tx_hash returned)
-          - No unrecoverable errors
-
-          Allow up to 10 turns of back-and-forth. If the agent asks questions, approve and tell it to proceed.
-
-          ## Output
-
-          Print exactly one of:
-          - INTEGRATION_TEST: PASS — with a brief summary of what was tested and the tx hash if any
-          - INTEGRATION_TEST: FAIL — with explanation of what went wrong
-
-          Important:
-          - Use small amounts (0.0001 ETH or less) to minimize cost
-          - Use timeouts: 60s for ready, 3 min per agent turn, 10 min total
-          - The CLI process must stay alive between messages
-          PROMPT
-          )" 2>&1 | tee /tmp/opencode-output.log
-
-          # Check the output for PASS/FAIL
-          if grep -q "INTEGRATION_TEST: PASS" /tmp/opencode-output.log; then
-            echo "✓ Integration test passed"
-          elif grep -q "INTEGRATION_TEST: FAIL" /tmp/opencode-output.log; then
-            echo "::error::Integration test failed"
-            exit 1
+          if [ "$SUCCESS" = "true" ] && [ -n "$TX_HASHES" ] && [ "$TX_HASHES" != "" ]; then
+            echo "✓ Integration test PASSED — tx: $TX_HASHES"
+          elif [ "$EXIT_CODE" -eq 0 ]; then
+            echo "✓ Integration test PASSED (no tx expected)"
           else
-            echo "::warning::Could not determine test result from opencode output"
+            echo "::error::Integration test FAILED"
+            echo "Tools: $TOOLS"
+            # Show last turn errors
+            jq -r '.turns[-1].errors[]?' /tmp/test-result.json 2>/dev/null
+            exit 1
           fi
 
       # ── Cleanup ──
@@ -334,8 +316,14 @@ jobs:
           cat /tmp/mcp-server.log || true
           echo "=== Agent Backend Log ==="
           cat /tmp/agent-backend.log || true
-          echo "=== OpenCode Output ==="
-          cat /tmp/opencode-output.log 2>/dev/null || echo "No opencode output"
+          echo "=== OpenCode Formulate Log ==="
+          cat /tmp/opencode-formulate.log 2>/dev/null || echo "No opencode output"
+          echo "=== Test Message ==="
+          cat /tmp/test-message.txt 2>/dev/null || echo "No test message"
+          echo "=== Test Runner Log ==="
+          cat /tmp/test-runner.log 2>/dev/null || echo "No runner log"
+          echo "=== Test Result ==="
+          cat /tmp/test-result.json 2>/dev/null || echo "No result"
 
       - name: Cleanup
         if: always()
