@@ -242,7 +242,7 @@ jobs:
 
       # ── Validate with Claude Code (requires Anthropic key) ──
       - name: Validate agent integration
-        if: env.AI_API_KEY != '' && secrets.ANTHROPIC_API_KEY != ''
+        if: env.AI_API_KEY != ''
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
