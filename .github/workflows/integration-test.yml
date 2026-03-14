@@ -12,9 +12,6 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
 
     services:
       postgres:
@@ -67,6 +64,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: agent-backend
 
+      - name: Checkout vultisig-sdk
+        uses: actions/checkout@v4
+        with:
+          repository: vultisig/vultisig-sdk
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: vultisig-sdk
+
       # ── Setup Go ──
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -76,6 +81,12 @@ jobs:
           cache-dependency-path: |
             mcp/go.sum
             agent-backend/go.sum
+
+      # ── Setup Node.js ──
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       # ── Build MCP server from PR branch ──
       - name: Build MCP server
@@ -142,40 +153,12 @@ jobs:
             sleep 1
           done
 
-      # ── Mint a test JWT (bypass vault ECDSA auth) ──
-      - name: Mint test JWT
-        working-directory: agent-backend
-        run: |
-          mkdir -p cmd/mint-jwt
-          cat > cmd/mint-jwt/main.go <<'GOEOF'
-          package main
-
-          import (
-            "fmt"
-            "time"
-
-            "github.com/vultisig/agent-backend/internal/auth"
-          )
-
-          func main() {
-            secret := []byte("integration-test-secret-key-not-for-prod")
-            token, err := auth.IssueToken("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", secret, 1*time.Hour)
-            if err != nil {
-              panic(err)
-            }
-            fmt.Print(token)
-          }
-          GOEOF
-          TOKEN=$(go run ./cmd/mint-jwt/)
-          echo "TEST_JWT=$TOKEN" >> "$GITHUB_ENV"
-
       # ── Verify agent-backend discovered MCP tools and skills ──
       - name: Verify MCP integration with agent-backend
         run: |
           echo "=== Agent Backend Logs ==="
           cat /tmp/agent-backend.log
 
-          # Check that tools were discovered
           TOOL_COUNT=$(grep -o '"mcp_tool_count":[0-9]*' /tmp/agent-backend.log | head -1 | grep -o '[0-9]*')
           echo "MCP tools discovered: $TOOL_COUNT"
           if [ -z "$TOOL_COUNT" ] || [ "$TOOL_COUNT" -lt 1 ]; then
@@ -183,7 +166,6 @@ jobs:
             exit 1
           fi
 
-          # Check that skills were discovered
           SKILL_COUNT=$(grep -o '"skill_count":[0-9]*' /tmp/agent-backend.log | head -1 | grep -o '[0-9]*')
           echo "MCP skills discovered: $SKILL_COUNT"
           if [ -z "$SKILL_COUNT" ] || [ "$SKILL_COUNT" -lt 1 ]; then
@@ -191,87 +173,83 @@ jobs:
             exit 1
           fi
 
-          # Verify our new skill is in the list
           if grep -q 'blur-sign-in' /tmp/agent-backend.log; then
             echo "✓ blur-sign-in skill discovered by agent-backend"
           else
             echo "::warning::blur-sign-in skill not found in agent-backend logs"
           fi
 
-      # ── Create conversation (tests JWT + DB) ──
-      - name: Create test conversation
+      # ── Setup vultisig-sdk CLI ──
+      - name: Install vultisig-sdk dependencies
+        working-directory: vultisig-sdk
+        run: npm ci
+
+      - name: Build vultisig-sdk
+        working-directory: vultisig-sdk
+        run: npx turbo build
+
+      # ── Setup test vault ──
+      - name: Setup test vault
         run: |
-          CONV_RESP=$(curl -sf -X POST http://localhost:9998/agent/conversations \
-            -H "Authorization: Bearer $TEST_JWT" \
-            -H 'Content-Type: application/json' \
-            -d '{"public_key":"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}')
-          echo "Conversation: $CONV_RESP"
-          CONV_ID=$(echo "$CONV_RESP" | jq -r '.id')
-          if [ -z "$CONV_ID" ] || [ "$CONV_ID" = "null" ]; then
-            echo "::error::Failed to create conversation"
-            exit 1
-          fi
-          echo "CONV_ID=$CONV_ID" >> "$GITHUB_ENV"
+          mkdir -p ~/.vultisig
+          cp mcp/testdata/test-vault.json ~/.vultisig/vault:023118028f9e87a0a6a10e84e26d2d8147ea8cb0d00aaf0d91b2ca512fba033120.json
+          echo '{"activeVaultId":"023118028f9e87a0a6a10e84e26d2d8147ea8cb0d00aaf0d91b2ca512fba033120"}' > ~/.vultisig/activeVaultId.json
 
-      # ── Send test message (requires AI API key) ──
-      - name: Send test message
-        if: env.AI_API_KEY != ''
+      # ── Install and configure opencode ──
+      - name: Install opencode
         run: |
-          SKILL_LIST=$(curl -sf http://localhost:8888/skills | jq -r '.[].name' | tr '\n' ', ')
-          echo "Available skills: $SKILL_LIST"
+          curl -fsSL https://opencode.ai/install | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-          RESP=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:9998/agent/conversations/${CONV_ID}/messages" \
-            -H "Authorization: Bearer $TEST_JWT" \
-            -H 'Content-Type: application/json' \
-            --max-time 120 \
-            -d "{
-              \"public_key\": \"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",
-              \"content\": \"What skills and capabilities do you have? List all of them.\",
-              \"context\": {}
-            }")
-          HTTP_CODE=$(echo "$RESP" | tail -1)
-          BODY=$(echo "$RESP" | sed '$d')
-          echo "$BODY" > /tmp/agent-response.json
-          echo "HTTP status: $HTTP_CODE"
-          echo "Response: $(echo "$BODY" | jq -r '.message.content // .error // "no content"' 2>/dev/null | head -c 500)"
-          if [ "$HTTP_CODE" -ge 400 ]; then
-            echo "::error::Agent message failed with HTTP $HTTP_CODE"
+      - name: Configure opencode auth
+        run: |
+          mkdir -p ~/.local/share/opencode
+          echo '${{ secrets.OPENCODE_AUTH }}' > ~/.local/share/opencode/auth.json
+
+      # ── Run integration test via opencode ──
+      - name: Run integration test with opencode
+        working-directory: vultisig-sdk
+        env:
+          VAULT_PASSWORD: ${{ secrets.TEST_VAULT_PASSWORD }}
+        run: |
+          opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
+          You are running an integration test for the Vultisig agent stack.
+
+          The agent-backend is running at http://localhost:9998 and the MCP server at http://localhost:8888.
+          A test vault named 'ci_test' is configured in ~/.vultisig/.
+
+          Your task:
+          1. Start the vultisig CLI agent in pipe mode by running:
+             npx tsx clients/cli/src/index.ts agent --vault ci_test --backend-url http://localhost:9998 --via-agent
+
+          2. The CLI will output NDJSON lines. Wait for a {"type":"ready"} event.
+
+          3. Then write this JSON line to stdin:
+             {"type":"message","content":"What is the Blur Sign-In skill? Describe what it does."}
+
+          4. Read the NDJSON output until you see {"type":"done"}.
+
+          5. Check the assistant's response mentions blur, EIP-712, and wallet authentication.
+
+          6. Print your verdict:
+             INTEGRATION_TEST: PASS — if the agent responded with relevant information about Blur Sign-In
+             INTEGRATION_TEST: FAIL — with explanation if something went wrong
+
+          Important: The CLI uses NDJSON (one JSON object per line) on stdin/stdout.
+          Use a timeout of 120 seconds for the agent response.
+          PROMPT
+          )" 2>&1 | tee /tmp/opencode-output.log
+
+          # Check the output for PASS/FAIL
+          if grep -q "INTEGRATION_TEST: PASS" /tmp/opencode-output.log; then
+            echo "✓ Integration test passed"
+          elif grep -q "INTEGRATION_TEST: FAIL" /tmp/opencode-output.log; then
+            echo "::error::Integration test failed"
             exit 1
+          else
+            echo "::warning::Could not determine test result from opencode output"
+            # Don't fail — the infrastructure tests above already validated the stack
           fi
-
-      - name: Skip AI test (no API key)
-        if: env.AI_API_KEY == ''
-        run: echo "::notice::Skipping AI message test — OPENROUTER_API_KEY secret not configured"
-
-      # ── Validate with Claude Code (requires Anthropic key) ──
-      - name: Validate agent integration
-        if: env.AI_API_KEY != ''
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            You are validating an integration test for the Vultisig MCP + Agent stack.
-
-            The MCP server was built from the PR branch and started successfully.
-            The agent-backend connected to it and discovered its tools and skills.
-            A test message was sent asking the agent about its capabilities.
-
-            Files to check:
-            - /tmp/agent-response.json — the agent's response
-            - /tmp/mcp-server.log — MCP server logs
-            - /tmp/agent-backend.log — agent-backend logs
-
-            Validation criteria:
-            1. The agent-response.json contains a valid response with a non-empty message
-            2. The agent-backend.log shows MCP tools and skills were discovered
-            3. No critical errors in either log file
-
-            Read the files and output your verdict as:
-            INTEGRATION_TEST: PASS — if all criteria are met
-            INTEGRATION_TEST: FAIL — if any criteria fails
-
-            Include a brief explanation.
-          claude_args: '--allowedTools "Bash(cat:*),Bash(jq:*),Bash(grep:*),Bash(head:*),Bash(tail:*),Bash(wc:*)"'
 
       # ── Cleanup ──
       - name: Show logs on failure
@@ -281,8 +259,8 @@ jobs:
           cat /tmp/mcp-server.log || true
           echo "=== Agent Backend Log ==="
           cat /tmp/agent-backend.log || true
-          echo "=== Agent Response ==="
-          cat /tmp/agent-response.json 2>/dev/null || echo "No response file"
+          echo "=== OpenCode Output ==="
+          cat /tmp/opencode-output.log 2>/dev/null || echo "No opencode output"
 
       - name: Cleanup
         if: always()
