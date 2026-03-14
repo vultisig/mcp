@@ -186,7 +186,7 @@ jobs:
 
       - name: Build vultisig-sdk
         working-directory: vultisig-sdk
-        run: yarn turbo build
+        run: yarn build:sdk
 
       # ── Setup test vault ──
       - name: Setup test vault
