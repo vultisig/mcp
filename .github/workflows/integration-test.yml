@@ -153,48 +153,6 @@ jobs:
             sleep 1
           done
 
-      # ── Mint a test JWT (bypass vault ECDSA auth) ──
-      - name: Mint test JWT
-        working-directory: agent-backend
-        run: |
-          mkdir -p cmd/mint-jwt
-          cat > cmd/mint-jwt/main.go <<'GOEOF'
-          package main
-
-          import (
-            "fmt"
-            "time"
-
-            "github.com/vultisig/agent-backend/internal/auth"
-          )
-
-          func main() {
-            secret := []byte("integration-test-secret-key-not-for-prod")
-            token, err := auth.IssueToken("023118028f9e87a0a6a10e84e26d2d8147ea8cb0d00aaf0d91b2ca512fba033120", secret, 1*time.Hour)
-            if err != nil {
-              panic(err)
-            }
-            fmt.Print(token)
-          }
-          GOEOF
-          TOKEN=$(go run ./cmd/mint-jwt/)
-          echo "TEST_JWT=$TOKEN" >> "$GITHUB_ENV"
-
-      # ── Create conversation ──
-      - name: Create test conversation
-        run: |
-          CONV_RESP=$(curl -sf -X POST http://localhost:9998/agent/conversations \
-            -H "Authorization: Bearer $TEST_JWT" \
-            -H 'Content-Type: application/json' \
-            -d '{"public_key":"023118028f9e87a0a6a10e84e26d2d8147ea8cb0d00aaf0d91b2ca512fba033120"}')
-          echo "Conversation: $CONV_RESP"
-          CONV_ID=$(echo "$CONV_RESP" | jq -r '.id')
-          if [ -z "$CONV_ID" ] || [ "$CONV_ID" = "null" ]; then
-            echo "::error::Failed to create conversation"
-            exit 1
-          fi
-          echo "CONV_ID=$CONV_ID" >> "$GITHUB_ENV"
-
       # ── Verify agent-backend discovered MCP tools and skills ──
       - name: Verify MCP integration with agent-backend
         run: |
@@ -243,41 +201,59 @@ jobs:
           curl -fsSL https://opencode.ai/install | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Configure opencode auth
+      - name: Configure opencode
         run: |
           mkdir -p ~/.local/share/opencode
           echo '${{ secrets.OPENCODE_AUTH }}' > ~/.local/share/opencode/auth.json
+          mkdir -p ~/.config/opencode
+          cat > ~/.config/opencode/opencode.json <<'EOF'
+          {
+            "$schema": "https://opencode.ai/config.json",
+            "permission": {
+              "*": {
+                "*": "allow"
+              }
+            }
+          }
+          EOF
 
       # ── Run integration test via opencode ──
       - name: Run integration test with opencode
+        working-directory: vultisig-sdk
         env:
           VAULT_PASSWORD: ${{ secrets.TEST_VAULT_PASSWORD }}
         run: |
-          opencode run --model opencode/minimax-m2.5 "$(cat <<PROMPT
-          You are an integration test agent. Your job is to chat with a Vultisig AI agent and verify it knows about the Blur Sign-In skill.
+          export VAULT_PASSWORD
+          opencode run --model opencode/minimax-m2.5 "$(cat <<'PROMPT'
+          You are an integration test agent. Your job is to chat with a Vultisig AI agent through the vultisig CLI and verify the agent knows about the Blur Sign-In skill.
 
-          You have access to a running agent-backend at http://localhost:9998. A conversation has already been created.
+          The full stack is already running:
+          - MCP server at localhost:8888
+          - agent-backend at localhost:9998
+          - Test vault 'ci_test' is configured in ~/.vultisig/
+          - The vault password is in the $VAULT_PASSWORD environment variable
 
-          To chat with the agent, send messages using curl like this:
+          Start the vultisig CLI agent in pipe mode:
 
-          curl -s -X POST "http://localhost:9998/agent/conversations/${CONV_ID}/messages" \\
-            -H "Authorization: Bearer ${TEST_JWT}" \\
-            -H 'Content-Type: application/json' \\
-            --max-time 120 \\
-            -d '{"public_key":"023118028f9e87a0a6a10e84e26d2d8147ea8cb0d00aaf0d91b2ca512fba033120","content":"YOUR MESSAGE HERE","context":{}}'
+              npx tsx clients/cli/src/index.ts agent --vault ci_test --password "$VAULT_PASSWORD" --backend-url http://localhost:9998 --via-agent
 
-          This is the same as a human typing in the chat. The response JSON has .message.content with the agent's reply.
+          This spawns a process that communicates via NDJSON (one JSON object per line) on stdin/stdout:
+          - Wait for a line containing "type":"ready" — the CLI is initialized
+          - Write a JSON message to its stdin: {"type":"message","content":"What is the Blur Sign-In skill? Explain how it works."}
+          - Read lines until you see "type":"done" — the agent's turn is complete
+          - Lines with "type":"text_delta" contain the agent's streaming response in the "delta" field
+          - Lines with "type":"assistant" contain the full response in "content"
 
-          Your task:
-          1. Send the agent this message: "What is the Blur Sign-In skill? Explain how it works."
-          2. Read the agent's response from .message.content
-          3. If the agent mentions blur, EIP-712, and wallet signing/authentication, the test passes
-          4. If the response is unclear or doesn't mention blur, send a follow-up: "Tell me specifically about the blur-sign-in skill from your skills list."
-          5. Evaluate the final response
+          After the agent responds, evaluate:
+          - Does the response mention Blur, EIP-712, and wallet authentication/signing?
+          - If yes: print INTEGRATION_TEST: PASS
+          - If unclear, send a follow-up message asking specifically about blur-sign-in
+          - If the agent fails or errors out: print INTEGRATION_TEST: FAIL with explanation
 
-          Print your verdict as exactly one of these lines:
-          INTEGRATION_TEST: PASS — if the agent demonstrated knowledge of the Blur Sign-In skill
-          INTEGRATION_TEST: FAIL — with a brief explanation of what went wrong
+          Important:
+          - Always pass --password "$VAULT_PASSWORD" to the CLI
+          - Use timeouts to avoid hanging (60s for ready, 120s for response)
+          - The CLI is a long-running process — keep it alive between messages
           PROMPT
           )" 2>&1 | tee /tmp/opencode-output.log
 
