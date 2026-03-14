@@ -228,7 +228,7 @@ jobs:
 
           Write a bash script that does the following:
           1. Spawns the CLI in pipe mode as a background process:
-             npx tsx clients/cli/src/index.ts agent --vault ci_test --backend-url http://localhost:9998 --via-agent
+             npx tsx clients/cli/src/index.ts agent --vault ci_test --password "$VAULT_PASSWORD" --backend-url http://localhost:9998 --via-agent
 
           2. The CLI communicates via NDJSON (one JSON object per line) on stdin/stdout.
              - It will emit {"type":"ready",...} when initialized
@@ -248,8 +248,7 @@ jobs:
              INTEGRATION_TEST: FAIL — with explanation if something went wrong
 
           Important notes:
-          - The VAULT_PASSWORD env var is already exported in the shell. The CLI reads it automatically — do NOT prompt for or hardcode a password.
-          - When spawning the CLI subprocess, ensure VAULT_PASSWORD is passed through (e.g. VAULT_PASSWORD="$VAULT_PASSWORD" npx tsx ...) so the child process inherits it.
+          - The vault password is in the $VAULT_PASSWORD shell variable. Always pass it via --password "$VAULT_PASSWORD" flag. NEVER hardcode, echo, or log the password value.
           - Do NOT use interactive commands, everything must be non-interactive.
           - Use timeout commands to avoid hanging.
           PROMPT
