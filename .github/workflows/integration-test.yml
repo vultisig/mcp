@@ -249,16 +249,16 @@ jobs:
           opencode run --model opencode/minimax-m2.5-free "$(cat <<'PROMPT'
           Read /tmp/pr-changes.txt which contains the git diff of new/changed MCP skills and tools.
 
-          Your job: write a single user message that would exercise the SPECIFIC functionality added or changed in this PR. The message must be directly related to the domain of the changed files.
+          Your job: write a single user message that a crypto wallet user would send to an AI agent. The message MUST request a transaction that gets built and signed — read-only queries alone are not sufficient.
 
           Rules:
           1. Read the diff carefully. Identify the domain (e.g. if an aave skill was added, test aave; if a solana tool changed, test solana).
           2. The test message MUST target the changed domain. Do NOT pick an unrelated operation.
-          3. If a skill file was added or changed, read its contents in the diff and craft a request that uses one of the flows described in that skill.
-          4. Use small amounts to minimize cost (0.0001 ETH or equivalent).
+          3. If a skill file was added or changed, read its contents in the diff and pick a WRITE operation (deposit, supply, swap, send, wrap, etc.) — not a read-only query.
+          4. Use tiny amounts to minimize cost (0.0001 ETH, 0.001 USDC, etc.).
           5. Include specific contract addresses from the skill/tool if available.
           6. The message must be self-contained — the agent should execute it without follow-up questions.
-          7. Only if there are truly NO functional changes (e.g. only CI config changes), use this fallback: "Check my ETH balance on Ethereum"
+          7. Fallback (only if there are truly NO functional changes): "Send 0.000001 ETH to my own Ethereum address"
 
           Write ONLY the raw message text to /tmp/test-message.txt — no explanation, no quotes, no markdown.
           PROMPT
