@@ -2,7 +2,6 @@ name: Integration Test
 
 on:
   pull_request:
-    branches: [main]
 
 concurrency:
   group: integration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -222,7 +221,7 @@ jobs:
       - name: Discover PR changes
         working-directory: mcp
         run: |
-          BASE="origin/main"
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
           {
             echo "=== New/changed skill files ==="
             git diff "$BASE"...HEAD --name-status -- 'internal/skills/files/*.md' || true
@@ -250,13 +249,18 @@ jobs:
           opencode run --model opencode/minimax-m2.5-free "$(cat <<'PROMPT'
           Read /tmp/pr-changes.txt which contains the git diff of new/changed MCP skills and tools.
 
-          Based on the changes, write a single natural-language message that a user would send to a crypto wallet AI agent to exercise the new functionality. The message should:
-          - Be a concrete, actionable request (e.g., "Wrap 0.0001 ETH to WETH on Ethereum using the WETH contract")
-          - Use small amounts (0.0001 ETH or less) to minimize cost
-          - Reference specific contract addresses from the skill if applicable
-          - Be self-contained — the agent should be able to execute it without follow-up
+          Your job: write a single user message that a crypto wallet user would send to an AI agent. The message MUST request a transaction that gets built and signed — read-only queries alone are not sufficient.
 
-          Write ONLY the message to a file at /tmp/test-message.txt — no explanation, no quotes, just the raw message text. If no testable skills/tools were changed, write "Check my ETH balance on Ethereum" as a fallback.
+          Rules:
+          1. Read the diff carefully. Identify the domain (e.g. if an aave skill was added, test aave; if a solana tool changed, test solana).
+          2. The test message MUST target the changed domain. Do NOT pick an unrelated operation.
+          3. If a skill file was added or changed, read its contents in the diff and pick a WRITE operation (deposit, supply, swap, send, wrap, etc.) — not a read-only query.
+          4. Use tiny amounts to minimize cost (0.0001 ETH, 0.001 USDC, etc.).
+          5. Include specific contract addresses from the skill/tool if available.
+          6. The message must be self-contained — the agent should execute it without follow-up questions.
+          7. Fallback (only if there are truly NO functional changes): "Send 0.000001 ETH to my own Ethereum address"
+
+          Write ONLY the raw message text to /tmp/test-message.txt — no explanation, no quotes, no markdown.
           PROMPT
           )" 2>&1 | tee /tmp/opencode-formulate.log
 
