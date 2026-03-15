@@ -221,7 +221,7 @@ jobs:
       - name: Discover PR changes
         working-directory: mcp
         run: |
-          BASE="origin/main"
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
           {
             echo "=== New/changed skill files ==="
             git diff "$BASE"...HEAD --name-status -- 'internal/skills/files/*.md' || true
